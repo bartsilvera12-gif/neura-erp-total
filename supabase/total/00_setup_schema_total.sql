@@ -554,6 +554,54 @@ BEGIN
 END $idx$;
 
 
+-- -----------------------------------------------------------------------------
+-- Repaso de triggers
+--
+-- La base atiende a otros clientes mientras esto corre. Si justo hay contención
+-- de locks, algún CREATE TRIGGER puede fallar con deadlock y saltearse con un
+-- WARNING. Acá se vuelve a intentar lo que haya quedado afuera.
+--
+-- Es idempotente y barato: si no faltó nada, no hace nada.
+-- -----------------------------------------------------------------------------
+
+DO $trg$
+DECLARE
+  r    RECORD;
+  def  text;
+  n    int := 0;
+BEGIN
+  FOR r IN
+    SELECT t.tgname, c.relname AS tabla, pg_get_triggerdef(t.oid) AS tdef
+    FROM pg_trigger t
+    JOIN pg_class c      ON c.oid = t.tgrelid
+    JOIN pg_namespace ns ON ns.oid = c.relnamespace
+    WHERE ns.nspname = 'asunhome'
+      AND NOT t.tgisinternal
+      AND EXISTS (
+        SELECT 1 FROM pg_class c2 JOIN pg_namespace n2 ON n2.oid = c2.relnamespace
+        WHERE n2.nspname = 'total' AND c2.relname = c.relname)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger t2
+        JOIN pg_class c2      ON c2.oid = t2.tgrelid
+        JOIN pg_namespace n2  ON n2.oid = c2.relnamespace
+        WHERE n2.nspname = 'total'
+          AND c2.relname = c.relname
+          AND t2.tgname = t.tgname)
+  LOOP
+    def := replace(r.tdef, 'asunhome.', 'total.');
+    BEGIN
+      EXECUTE def;
+      n := n + 1;
+      RAISE NOTICE 'trigger recuperado: % en %', r.tgname, r.tabla;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'trigger % en % sigue sin poder crearse: %', r.tgname, r.tabla, SQLERRM;
+    END;
+  END LOOP;
+  RAISE NOTICE 'triggers recuperados: %', n;
+END $trg$;
+
+
 -- =============================================================================
 -- PARTE 3 — ALCANCE TOTAL ELECTRODOMÉSTICOS SOBRE LA ESTRUCTURA HEREDADA
 --
