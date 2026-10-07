@@ -189,7 +189,9 @@ BEGIN
     WHERE n.nspname = p_src
   ) s;
 
-  EXECUTE format('CREATE SCHEMA %I', p_tgt);
+  -- IF NOT EXISTS porque el schema ya se creó en PARTE 1: las funciones
+  -- auxiliares viven adentro de él, así que tuvo que existir antes.
+  EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', p_tgt);
   EXECUTE format(
     'GRANT USAGE ON SCHEMA %I TO postgres, anon, authenticated, service_role',
     p_tgt
@@ -509,6 +511,47 @@ $clone$;
 -- =============================================================================
 
 SELECT total.neura_clonar_schema_estructura('asunhome', 'total');
+
+
+-- -----------------------------------------------------------------------------
+-- Repaso de índices que dependen de funciones del propio schema
+--
+-- Durante el clon los índices se crean antes que las funciones, así que los que
+-- usan una función del schema (p. ej. los GIN trgm sobre `sin_tildes`) se saltan
+-- con un WARNING. Ahora las funciones ya existen: se vuelven a intentar.
+-- -----------------------------------------------------------------------------
+
+DO $idx$
+DECLARE
+  r    RECORD;
+  def  text;
+  n    int := 0;
+BEGIN
+  FOR r IN
+    SELECT i.indexname, i.indexdef
+    FROM pg_indexes i
+    WHERE i.schemaname = 'asunhome'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_indexes j
+        WHERE j.schemaname = 'total' AND j.indexname = i.indexname)
+      -- Los que respaldan una constraint los crea la constraint, no acá
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class ic ON ic.oid = c.conindid
+        WHERE ic.relname = i.indexname)
+  LOOP
+    def := replace(r.indexdef, 'asunhome.', 'total.');
+    def := regexp_replace(def, '\mON total\.', 'ON total.');
+    BEGIN
+      EXECUTE def;
+      n := n + 1;
+      RAISE NOTICE 'indice recuperado: %', r.indexname;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'indice % sigue sin poder crearse: %', r.indexname, SQLERRM;
+    END;
+  END LOOP;
+  RAISE NOTICE 'indices recuperados: %', n;
+END $idx$;
 
 
 -- =============================================================================
