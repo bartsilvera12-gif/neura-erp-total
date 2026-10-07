@@ -1,44 +1,95 @@
-# Neura ERP — Total Electrodomésticos
+# TOTAL ERP
 
-ERP de Total Electrodomésticos. **Etapa 2 del proyecto: todavía no arrancó.**
+ERP dedicado de TOTAL. Instancia monocliente: **un solo schema Postgres**
+(`total`) con catálogo + datos operativos.
 
-La web vive en [`total-electrodomesticos-web`](https://github.com/bartsilvera12-gif/total-electrodomesticos-web)
-y está diseñada desacoplada, con datos mock, esperando esta integración.
+Derivado del código de `neura-erp-ferrecolor`, pero es un **proyecto
+independiente**: repo propio sin historial compartido, schema propio y deploy
+propio. Los cambios acá no impactan en Ferrecolor y viceversa.
 
-## Estado
-
-Repo vacío a propósito. El paso siguiente es partir de un ERP hermano de la familia
-(`neura-erp-esqueleto` o el que mejor se parezca a este caso) y ajustar schema y módulos.
-
-## Decisiones pendientes
-
-- **Schema.** Lo fija `APP_DB_SCHEMA`. Hay que elegir el nombre y revisar que matchee los
-  patrones de tenant del código, porque varios clientes mordieron ahí.
-- **Instancia.** ¿Supabase compartida (`api.neura.com.py`) o instancia dedicada?
-- **ERP base.** De qué ERP hermano se clona.
-
-## Módulos contemplados
-
-Clientes · Cobranzas · Compras · Dashboard · Gastos · Gerencia · Inventario · Movimientos ·
-Notas de crédito · Pagos · Reportes · Tableros · Ventas · Productos · Stock · Precios ·
-Pedidos provenientes de la web · Facturación · Caja · Proveedores · Cuentas por cobrar ·
-Cuentas por pagar · Usuarios y permisos
-
-## Integración con la web
-
-Cuando se conecte, el ERP define la fuente de verdad de: producto, precio, stock, cliente,
-pedido, venta y factura. La web no debe construir una segunda lógica que entre en conflicto.
-
-El panel web se queda solo con lo editorial: imágenes, descripciones comerciales, banners,
-orden de categorías, destacados, home, SEO.
-
-### Catálogo
-
-~3.400 artículos, con campos `IDART`, `NOMBRE`, `CODBARRA`, `PRECIO_1`, `COSTO`, `ESTADO`.
-
-**`COSTO` es información interna y nunca sale en la web pública.** El archivo del catálogo
-no se versiona en ningún repo del proyecto.
+- **Stack:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4
+- **Base de datos:** Supabase self-hosted (Postgres + PostgREST + Auth)
+- **Deploy:** Coolify vía Dockerfile (`output: "standalone"`)
 
 ---
 
-Desarrollado por [Neura](https://neura.com.py)
+## Puesta en marcha
+
+### 1. Base de datos
+
+Ejecutar en el **SQL Editor** de Supabase, como `postgres`:
+
+```
+supabase/total/00_setup_schema_total.sql
+```
+
+El script crea el schema `total` clonando la **estructura** de `ferrecolor`
+(sin datos), agrega las tablas del alcance TOTAL y aplica los grants.
+Detalle completo en [`supabase/total/README.md`](supabase/total/README.md).
+
+Después hay que exponer el schema en PostgREST (variables del contenedor `rest`):
+
+```
+PGRST_DB_SCHEMAS=public,graphql_public,total
+PGRST_DB_EXTRA_SEARCH_PATH=public,extensions,total
+```
+
+### 2. Variables de entorno
+
+```bash
+cp .env.example .env.local
+```
+
+Completar al menos `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY` y `DATABASE_URL`.
+
+`NEURA_CLIENT_SCHEMA` ya viene en `total` como default del código
+(`src/lib/supabase/schema.ts`); solo hace falta declararla si se cambia.
+
+### 3. Desarrollo
+
+```bash
+npm install
+npm run dev
+```
+
+---
+
+## Deploy en Coolify
+
+Tipo de recurso: **Dockerfile** (no Nixpacks).
+
+Las `NEXT_PUBLIC_*` se inlinean durante `next build`, así que en Coolify tienen
+que estar cargadas **como build args además de runtime env**:
+
+| Variable | Build | Runtime |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | sí | sí |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | sí | sí |
+| `NEXT_PUBLIC_SUPER_ADMIN_EMAILS` | sí | sí |
+| `SUPABASE_SERVICE_ROLE_KEY` | no | sí |
+| `DATABASE_URL` / `DIRECT_URL` | no | sí |
+| `NEURA_CLIENT_SCHEMA` | no | sí |
+| `SIFEN_SECRETS_KEY` | no | sí |
+
+- **Puerto expuesto:** `3000`
+- **Comando:** el del Dockerfile (`node server.js`) — no sobrescribir
+
+---
+
+## Estructura
+
+```
+src/app/          rutas y páginas (App Router)
+src/components/   UI
+src/lib/          dominio: ventas, compras, inventario, sifen, chat, crm...
+supabase/total/    setup del schema de esta instancia   ← empezar acá
+supabase/migrations/  histórico heredado de Ferrecolor (referencia)
+scripts/          utilidades de mantenimiento y QA
+docs/             documentación funcional heredada
+```
+
+> `supabase/migrations/` se conserva como **referencia histórica**. Esas
+> migraciones apuntan a schemas `public` / `zentra_erp` / `erp_*` y **no**
+> alcanzan al schema `total`. Los cambios de base nuevos van como scripts
+> propios en `supabase/total/`.
