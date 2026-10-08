@@ -164,7 +164,7 @@ export async function GET(
     }
 
     // 4) Empresa (para ciudad si la tuvieramos; hoy solo hardcoded HERNANDARIAS)
-    // Podria leerse de ferrecolor.empresas si se completa el campo 'ciudad'.
+    // Podria leerse de total.empresas si se completa el campo 'ciudad'.
 
     const filas = (items ?? []).map((it: Record<string, unknown>) => {
       const cant = Number(it.cantidad ?? 0);
@@ -238,7 +238,7 @@ export async function GET(
 
     const html = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8" />
-<title>Comprobante ${escapeHtml(numeroControl)} — Ferrecolor</title>
+<title>Comprobante ${escapeHtml(numeroControl)} — TOTAL ELECTRODOMÉSTICOS</title>
 <style>
   * { box-sizing: border-box; }
   /* Sin tamaño fijo: así el desplegable de papel del diálogo de Chrome queda

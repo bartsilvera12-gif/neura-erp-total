@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # ^ Necesario para los cache mounts (--mount=type=cache). Coolify usa BuildKit por defecto.
 #
-# neura-erp-asunhome — build de producción (misma plantilla que neura-sistemas).
+# neura-erp-total — build de producción (misma plantilla que neura-sistemas).
 # Reemplaza a nixpacks: imagen standalone (node server.js), más liviana en RAM,
 # compilada en el build server en lugar del servidor de producción.
 

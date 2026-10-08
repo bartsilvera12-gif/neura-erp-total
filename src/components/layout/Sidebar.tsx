@@ -208,11 +208,9 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "ventas", "presupuestos", "reservas", "comisiones", "planes"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["pagos", "cuentas-por-pagar", "gastos", "otros_ingresos", "entidades_bancarias", "notas_credito", "reportes"] },
-  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "tecnico", "compras", "recetas", "proyectos"] },
-  { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones", "conversaciones-finalizadas", "historial-omnicanal", "monitoreo", "campanas"] },
-  { id: "marketing", titulo: "Marketing y Automatización", keys: ["marketing", "marketing_ops", "sorteos"] },
+  { id: "comercial", titulo: "Comercial", keys: ["ventas", "clientes"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["cobranzas", "pagos", "gastos", "notas_credito", "reportes"] },
+  { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
 ];
 

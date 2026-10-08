@@ -1,5 +1,5 @@
 /**
- * Comprobante A4 landscape de la devolucion, mismo look que el comprobante de venta de Ferrecolor.
+ * Comprobante A4 landscape de la devolucion, mismo look que el comprobante de venta.
  * GET /api/devoluciones/[id]/comprobante?auto=1
  */
 import { NextRequest, NextResponse } from "next/server";

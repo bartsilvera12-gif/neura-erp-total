@@ -4,9 +4,13 @@
 --   * devoluciones_venta ligadas a esas ventas
 -- No toca ventas mixtas que ademas incluyan otros productos.
 --
--- Corre en Supabase SQL editor, schema del tenant Ferrecolor.
+-- Corre en Supabase SQL editor.
+--
+-- OJO: apuntaba al schema `ferrecolor` —otro cliente— porque viene del repo de
+-- origen. Ahora apunta a `total`. Verificá el search_path antes de ejecutarlo:
+-- este script BORRA datos.
 
-SET search_path TO ferrecolor, public;
+SET search_path TO total, public;
 
 -- ══════════════════════════════════════════════════════════════════
 -- PREVIEW (ejecuta este bloque primero, verifica los resultados)

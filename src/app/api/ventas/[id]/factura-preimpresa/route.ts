@@ -195,6 +195,12 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     // Modo calibración (solo dev): HTML con la plantilla de fondo, para verificar
     // en pantalla. En uso real se devuelve un PDF a 216×330 mm exactos, que se
     // imprime a "Tamaño real" sin encogerse (a diferencia del HTML del navegador).
+    //
+    // La imagen de fondo todavía no existe. La que venía del repo de origen era
+    // la factura preimpresa de Asunhome, con su RUC y su timbrado: se eliminó.
+    // Para calibrar hay que escanear un formulario preimpreso de Total y
+    // guardarlo en public/brand/ con este nombre. Sin ella la calibración se ve
+    // sin fondo; la impresión real no usa esta imagen.
     if (calibrar) {
       const html = renderFacturaPreimpresa(data, { calibrar: true, ver, bgUrl: "/brand/factura-preimpresa-total.png" });
       return new NextResponse(html, {

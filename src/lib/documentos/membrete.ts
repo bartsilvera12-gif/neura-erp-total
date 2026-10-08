@@ -7,12 +7,16 @@
  */
 
 export const EMPRESA_DOC = {
-  nombre: "TOTAL",
-  actividad: [
-    "Venta de muebles y artículos para el hogar",
-  ],
-  telefono: "0992265398",
-  direccion: ["Dr. López Moreira 4782 c/ Juan S. Bogarín — Asunción, Recoleta"],
+  nombre: "TOTAL ELECTRODOMÉSTICOS",
+  /**
+   * PENDIENTE: actividad económica y dirección fiscal reales de Total.
+   * Van vacías a propósito. Lo que había acá era de Asunhome —el repo de origen—
+   * con el nombre cambiado, y un membrete con los datos de otra empresa es peor
+   * que uno incompleto.
+   */
+  actividad: [] as string[],
+  telefono: "0983 918 520 · 0974 203 063",
+  direccion: [] as string[],
   /** Logo del cliente (alta calidad, sin fondo). Servido desde /public. */
   logoUrl: "/brand/total-logo.png",
 };
