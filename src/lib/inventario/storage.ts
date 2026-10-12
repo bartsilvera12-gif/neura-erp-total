@@ -42,6 +42,9 @@ interface ProductoRow {
   es_insumo?: boolean | null;
   controla_stock?: boolean | null;
   destacado?: boolean | null;
+  visible_web?: boolean | null;
+  orden_web?: number | null;
+  slug_web?: string | null;
   oferta_semana_destacada?: boolean | null;
   discount_type?: string | null;
   discount_value?: number | string | null;
@@ -107,6 +110,11 @@ function rowToProducto(row: ProductoRow): Producto {
     es_insumo: row.es_insumo ?? false,
     controla_stock: row.controla_stock ?? true,
     destacado: row.destacado ?? false,
+    // Tienda online. Si no se copian acá, al recargar vuelven undefined y el
+    // check de «En la tienda» aparece vacío aunque la base diga que sí.
+    visible_web: row.visible_web ?? false,
+    orden_web: row.orden_web ?? 0,
+    slug_web: row.slug_web ?? null,
     oferta_semana_destacada: row.oferta_semana_destacada ?? false,
     discount_type:
       row.discount_type === "percentage" || row.discount_type === "fixed"
