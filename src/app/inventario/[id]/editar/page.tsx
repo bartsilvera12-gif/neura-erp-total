@@ -275,21 +275,6 @@ export default function EditarProductoPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // ¿El producto tiene receta asociada? (para advertir al cambiar el tipo)
-  useEffect(() => {
-    if (!id) return;
-    let cancel = false;
-    fetch("/api/recetas", { credentials: "include", cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (cancel) return;
-        const recs = (j?.data?.recetas ?? j?.data ?? []) as Array<{ producto_id?: string }>;
-        setTieneReceta(Array.isArray(recs) && recs.some((r) => r.producto_id === id));
-      })
-      .catch(() => { /* la advertencia es informativa, no bloquea */ });
-    return () => { cancel = true; };
-  }, [id]);
-
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
