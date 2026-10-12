@@ -8,14 +8,7 @@ import SelectFromList from "@/components/inventario/SelectFromList";
 import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import { cargarSeries } from "@/lib/inventario/series";
 import type { MetodoValuacion } from "@/lib/inventario/types";
-import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
 
-// Opciones estándar de unidad de medida para gastro
-const TIPO_SUMMARY: Record<"reventa" | "menu" | "materia", { titulo: string; descripcion: string; Icon: LucideIcon; acento: string }> = {
-  reventa: { titulo: "Producto de reventa", descripcion: "Se compra y se vende tal cual. Controla stock y descuenta al vender.", Icon: ShoppingBag, acento: "text-sky-600" },
-  menu:    { titulo: "Producto del menú",   descripcion: "Se vende en Ventas y genera pedido. No descuenta stock directo.",     Icon: ClipboardList, acento: "text-amber-600" },
-  materia: { titulo: "Materia prima / insumo", descripcion: "Se usa para recetas y costeo. No aparece como producto de venta.", Icon: Boxes, acento: "text-emerald-600" },
-};
 
 interface CatRow { id: string; nombre: string }
 interface UbiRow { id: string; nombre: string; tipo: string }
@@ -65,27 +58,8 @@ export default function NuevoProductoPage() {
   // Selector inicial de tipo gastronómico — aplica presets a los flags.
   // ERP ferreteria: siempre arranca en "reventa" y se saltea el selector.
   // El modulo sigue admitiendo "menu"/"materia" en codigo por si se reactiva.
-  type TipoGastro = "reventa" | "menu" | "materia" | null;
-  const [tipoGastro, setTipoGastro] = useState<TipoGastro>("reventa");
-  function aplicarTipoGastro(tipo: Exclude<TipoGastro, null>) {
-    setTipoGastro(tipo);
-    if (tipo === "reventa") {
-      setEsVendible(true);
-      setEsInsumo(false);
-      setControlaStock(true);
-      setForm((prev) => ({ ...prev, unidad_medida: prev.unidad_medida || "UNIDAD" }));
-    } else if (tipo === "menu") {
-      setEsVendible(true);
-      setEsInsumo(false);
-      setControlaStock(false);
-      setForm((prev) => ({ ...prev, unidad_medida: prev.unidad_medida || "UNIDAD" }));
-    } else {
-      setEsVendible(false);
-      setEsInsumo(true);
-      setControlaStock(false);
-      setForm((prev) => ({ ...prev, unidad_medida: prev.unidad_medida || "G" }));
-    }
-  }
+  type TipoGastro = "reventa" | "menu" | "materia";
+  const [tipoGastro] = useState<TipoGastro>("reventa");
 
   // Configuración gastronómica
   const [controlaStock, setControlaStock] = useState(true);
@@ -172,7 +146,6 @@ export default function NuevoProductoPage() {
 
   // Patrones de SKU según el tipo elegido (para "Generar SKU" y el dropdown).
   useEffect(() => {
-    if (!tipoGastro) return;
     let cancel = false;
     fetch(`/api/productos/sku-sugerencias?tipo=${tipoGastro}`, { credentials: "include", cache: "no-store" })
       .then((r) => r.json())
@@ -186,7 +159,7 @@ export default function NuevoProductoPage() {
     setGenerandoSku(true);
     setErrorDuplicado(null);
     try {
-      const res = await fetch(`/api/productos/sku-sugerencias?tipo=${tipoGastro ?? "reventa"}`, {
+      const res = await fetch(`/api/productos/sku-sugerencias?tipo=${tipoGastro}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -446,72 +419,9 @@ export default function NuevoProductoPage() {
     "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white text-sm";
   const labelClass = "block text-sm font-medium text-slate-700 mb-2";
 
-  // Paso 0: selector inicial de tipo de producto
-  if (tipoGastro === null) {
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Nuevo producto</h1>
-          <p className="text-gray-600">¿Qué tipo de producto vas a cargar?</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl">
-          {([
-            {
-              tipo: "reventa" as const,
-              titulo: "Producto de reventa",
-              Icon: ShoppingBag,
-              iconColor: "text-sky-600",
-              ejemplo: "Gaseosas, agua, jugos, postres comprados",
-              descripcion: "Se compra y se vende tal cual. Controla stock y descuenta al vender.",
-              acento: "border-sky-300 bg-sky-50/40 hover:border-sky-500",
-            },
-            {
-              tipo: "menu" as const,
-              titulo: "Producto del menú",
-              Icon: ClipboardList,
-              iconColor: "text-amber-600",
-              ejemplo: "Pizzas, lomitos, hamburguesas, combos",
-              descripcion: "Producto preparado por el local. No descuenta stock directo (usá receta para costeo).",
-              acento: "border-amber-300 bg-amber-50/40 hover:border-amber-500",
-            },
-            {
-              tipo: "materia" as const,
-              titulo: "Materia prima / insumo",
-              Icon: Boxes,
-              iconColor: "text-emerald-600",
-              ejemplo: "Harina, queso, salsa, carne, envases",
-              descripcion: "Insumo para recetas. Sólo se usa para costear productos del menú.",
-              acento: "border-emerald-300 bg-emerald-50/40 hover:border-emerald-500",
-            },
-          ]).map((opt) => (
-            <button
-              key={opt.tipo}
-              type="button"
-              onClick={() => aplicarTipoGastro(opt.tipo)}
-              className={`text-left rounded-xl border-2 ${opt.acento} p-5 transition-all hover:shadow-md`}
-            >
-              <opt.Icon className={`w-7 h-7 mb-2 ${opt.iconColor}`} />
-              <div className="text-base font-semibold text-slate-900">{opt.titulo}</div>
-              <div className="mt-1 text-xs italic text-slate-500">Ej: {opt.ejemplo}</div>
-              <div className="mt-3 text-sm text-slate-700">{opt.descripcion}</div>
-            </button>
-          ))}
-        </div>
-        <div>
-          <button
-            type="button"
-            onClick={() => router.push("/inventario")}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            ← Cancelar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // En ferreteria solo hay productos de reventa. La card resumen con la
-  // descripcion del tipo se oculta — no aporta y ocupa espacio.
+  // En Total todos los productos son de reventa: `tipoGastro` arranca en
+  // "reventa" y no hay UI que lo cambie. El selector de tipo que traia
+  // asunhome (reventa / menu / materia prima) era inalcanzable.
   const showStock = tipoGastro === "reventa";
   const showPrecioVenta = tipoGastro !== "materia";
 
