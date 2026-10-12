@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
+  ShoppingBag,
   ShoppingCart,
   Package,
   Users,
@@ -86,6 +87,9 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Líneas de producto", href: "/inventario/lineas" },
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
+  // Pedidos que entran por la tienda online. El tablero sale del ERP de
+  // MANASTINA; la vista que lo alimenta la crea 07_pedidos_web_en_el_erp.sql.
+  { key: "pedidos_web", slug: "pedidos-web", label: "Pedidos web", href: "/pedidos-web", icon: ShoppingBag },
   {
     key: "compras",
     slug: "compras",
@@ -130,7 +134,7 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["ventas", "clientes"] },
+  { id: "comercial", titulo: "Comercial", keys: ["ventas", "clientes", "pedidos_web"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["cobranzas", "pagos", "gastos", "notas_credito", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
