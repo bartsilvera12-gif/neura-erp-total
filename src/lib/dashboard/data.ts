@@ -1,5 +1,4 @@
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getProspectos } from "@/lib/crm/storage";
 import { toCalendarDateStr } from "@/lib/fechas/calendario";
 
 // ── Tipos de salida (estructura esperada por el Dashboard en page.tsx) ────────
@@ -240,22 +239,14 @@ function toNum(v: unknown): number {
 // ── getDashboardData ──────────────────────────────────────────────────────────
 
 /**
- * Prospectos vía `/api/crm/prospectos` (tenant + service role), alineado al CRM Funnel.
+ * Prospectos: Total no usa CRM, así que no hay de dónde traerlos.
+ *
+ * Se deja la función para no tocar la forma de `getDashboardData`, que arma un
+ * objeto con todas las fuentes. Devuelve vacío y el dashboard no la mira: la
+ * pestaña que los mostraba (el embudo) se sacó.
  */
 async function fetchProspectos(): Promise<ProspectoRaw[]> {
-  const prospectosFromCrm = await getProspectos();
-  return prospectosFromCrm.map((p) => ({
-    id: p.id,
-    empresa: p.empresa,
-    contacto: p.contacto,
-    etapa: p.etapa,
-    servicio: p.servicio,
-    valor_estimado: p.valor_estimado ?? 0,
-    fecha_creacion: p.fecha_creacion ?? "",
-    fecha_actualizacion: p.fecha_actualizacion ?? "",
-    responsable: p.responsable,
-    cliente_creado: p.cliente_creado,
-  }));
+  return [];
 }
 
 /**

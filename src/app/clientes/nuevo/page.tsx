@@ -17,7 +17,6 @@ import {
   getErrorDiaVencimientoTributario,
   type TributarioFormState,
 } from "@/components/clientes/ClientePerfilTributarioForm";
-import { getProspecto, updateProspecto } from "@/lib/crm/storage";
 import { getUsuariosActivosEmpresa, type UsuarioEmpresa } from "@/lib/usuarios/empresa";
 import MontoInput from "@/components/ui/MontoInput";
 import { getPlanes } from "@/lib/planes/storage";
@@ -56,9 +55,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function NuevoClienteForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const fromCrmId    = searchParams?.get("from_crm");
-
-  const [crmBanner,  setCrmBanner]  = useState<string | null>(null);
   const [error,      setError]      = useState<string | null>(null);
   const [guardando,  setGuardando]  = useState(false);
   const [planes,     setPlanes]     = useState<Plan[]>([]);
@@ -187,26 +183,6 @@ function NuevoClienteForm() {
     if (p) setFormContado((fc) => ({ ...fc, monto: String(p.precio) }));
   }, [formSusc.plan_id, form.condicion_pago, planes]);
 
-  // Pre-fill desde CRM si viene con ?from_crm=id
-  useEffect(() => {
-    if (!fromCrmId) return;
-    let cancelled = false;
-    getProspecto(fromCrmId).then((prospecto) => {
-      if (cancelled || !prospecto) return;
-      setCrmBanner(`Prospecto ${prospecto.numero_control} — ${prospecto.empresa}`);
-      setForm((prev) => ({
-        ...prev,
-        tipo_cliente:    "empresa",
-        empresa:         prospecto.empresa,
-        nombre_contacto: prospecto.contacto,
-        telefono:        prospecto.telefono ?? "",
-        email:           prospecto.email    ?? "",
-        origen:          "CRM",
-        prospecto_id:    prospecto.id,
-      }));
-    });
-    return () => { cancelled = true; };
-  }, [fromCrmId]);
 
   const upper = ["empresa", "nombre_contacto", "nombre_facturacion", "ciudad", "pais", "vendedor_asignado", "condicion_pago", "direccion", "sifen_codigo_pais"];
   const lower = ["email", "email_secundario"];
@@ -393,11 +369,6 @@ function NuevoClienteForm() {
       }
     }
 
-    // Marcar prospecto CRM como cliente_creado
-    if (form.prospecto_id) {
-      await updateProspecto(form.prospecto_id, { cliente_creado: true });
-    }
-
     setGuardando(false);
     router.push(`/clientes/${clienteId}`);
   }
@@ -416,17 +387,6 @@ function NuevoClienteForm() {
         <h1 className="text-3xl font-bold text-gray-800">Nuevo cliente</h1>
         <p className="text-gray-500 text-sm mt-1">Registrá un cliente en la base de datos</p>
       </div>
-
-      {/* Banner CRM */}
-      {crmBanner && (
-        <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-5 py-3">
-          <span className="text-violet-500 text-lg">🔗</span>
-          <div>
-            <p className="text-sm font-semibold text-violet-800">Creando desde CRM</p>
-            <p className="text-xs text-violet-600">{crmBanner}</p>
-          </div>
-        </div>
-      )}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-3xl">
         <form className="space-y-8" onSubmit={handleSubmit}>
@@ -868,7 +828,6 @@ function NuevoClienteForm() {
                   value={form.origen}
                   onChange={(e) => setForm((prev) => ({ ...prev, origen: e.target.value as OrigenCliente }))}
                   className={inputClass}
-                  disabled={!!fromCrmId}
                 >
                   <option value="MANUAL">Manual</option>
                   <option value="CRM">CRM</option>

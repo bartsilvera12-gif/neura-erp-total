@@ -7,7 +7,6 @@ import { FancySelect } from "@/components/ui/FancySelect";
 import ClienteSelectorBuscador from "@/components/clientes/ClienteSelectorBuscador";
 import MobileFab from "@/components/ui/MobileFab";
 import { getVentas } from "@/lib/ventas/storage";
-import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import PedidosConsultaPendientes from "./PedidosConsultaPendientes";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
 import DevolucionWizard from "@/components/devoluciones/DevolucionWizard";
@@ -233,7 +232,6 @@ export default function VentasPage() {
       <CajaControlPanel />
 
       <PedidosConsultaPendientes />
-      <PedidosPendientesCaja />
 
 
       {/* ── Tabla de ventas ───────────────────────────────────────────────────── */}

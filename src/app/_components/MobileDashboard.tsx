@@ -8,7 +8,6 @@ import {
   ShoppingCart,
   Package,
   Users,
-  Receipt,
   AlertTriangle,
   TrendingUp,
   TrendingDown,
@@ -438,7 +437,7 @@ export default function MobileDashboard({
         </p>
         <div className="grid grid-cols-2 gap-3">
           <QuickAction href="/ventas/nueva" icon={ShoppingCart} label="Nueva venta" color="emerald" />
-          <QuickAction href="/dashboard/proyectos/nuevo" icon={Receipt} label="Nuevo pedido" color="sky" />
+          <QuickAction href="/inventario/nuevo" icon={Boxes} label="Nuevo producto" color="sky" />
           <QuickAction href="/compras/nueva" icon={Package} label="Nueva compra" color="violet" />
           <QuickAction href="/clientes/nuevo" icon={Users} label="Nuevo cliente" color="amber" />
         </div>
