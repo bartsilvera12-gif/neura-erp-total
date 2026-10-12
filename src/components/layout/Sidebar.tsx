@@ -127,10 +127,6 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Categorías", href: "/inventario/categorias" },
     { label: "Marcas", href: "/inventario/marcas" },
     { label: "Líneas de producto", href: "/inventario/lineas" },
-    { label: "Números de serie", href: "/inventario/series" },
-    { label: "Averiados", href: "/inventario/averiados" },
-    // TOTAL sí usa ubicaciones: separa stock de salón y de depósito.
-    { label: "Depósitos / Ubicaciones", href: "/inventario/ubicaciones" },
   ]},
   // Clientes: reactivado para que el modulo Consulta pueda asociar pedidos.
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
