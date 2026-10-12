@@ -20,6 +20,12 @@ import type { ArqueoItem } from "./denominaciones";
 export type EstadoCaja = "abierta" | "en_cierre" | "cerrada";
 export type TipoMovimientoCaja = "ingreso" | "egreso" | "retiro" | "ajuste";
 export type MedioPagoCaja = "efectivo" | "tarjeta" | "transferencia" | "otro";
+/**
+ * Metodo de pago de una VENTA. A diferencia de un movimiento de caja, una
+ * venta puede cobrarse con varios medios a la vez; en ese caso se guarda
+ * "mixto" y el desglose real vive en ventas_pagos_detalle.
+ */
+export type MetodoPagoVenta = MedioPagoCaja | "mixto";
 
 export type { ArqueoItem, TipoDenominacion, Denominacion } from "./denominaciones";
 
@@ -119,7 +125,7 @@ export interface CajaDetalleVenta {
   id: string;
   numero_control: string | null;
   fecha: string;
-  metodo_pago: MedioPagoCaja;
+  metodo_pago: MetodoPagoVenta;
   tipo_venta: string | null;
   total: number;
   estado: string | null;

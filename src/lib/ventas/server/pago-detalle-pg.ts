@@ -16,6 +16,27 @@ function pool() {
 
 export type MetodoPagoDetalle = "efectivo" | "transferencia" | "tarjeta" | "qr" | "billetera" | "otro";
 
+const METODOS_PAGO_DETALLE: readonly MetodoPagoDetalle[] = [
+  "efectivo",
+  "transferencia",
+  "tarjeta",
+  "qr",
+  "billetera",
+  "otro",
+];
+
+/**
+ * Normaliza el metodo de pago que llega en el body de una request.
+ * El browser puede mandar cualquier string; lo que no esta en la lista cae
+ * en "efectivo", que es el default de la columna.
+ */
+export function parseMetodoPagoDetalle(v: unknown): MetodoPagoDetalle {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return (METODOS_PAGO_DETALLE as readonly string[]).includes(s)
+    ? (s as MetodoPagoDetalle)
+    : "efectivo";
+}
+
 export interface PagoDetalleInput {
   metodo_pago: MetodoPagoDetalle;
   entidad_bancaria_id: string | null;

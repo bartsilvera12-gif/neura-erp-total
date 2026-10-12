@@ -12,7 +12,7 @@ import { useParams } from "next/navigation";
 import { ArrowDownCircle, ArrowUpCircle, ShoppingCart, DoorOpen } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { getCajaDetalle } from "@/lib/reportes/storage";
-import type { ArqueoItem, CajaDetalle, MedioPagoCaja } from "@/lib/caja/types";
+import type { ArqueoItem, CajaDetalle, MetodoPagoVenta } from "@/lib/caja/types";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -36,10 +36,13 @@ function formatFechaHora(iso: string | null) {
   }
 }
 
-const MEDIO_LABEL: Record<MedioPagoCaja, string> = {
+// El timeline mezcla ventas y movimientos de caja. Una venta puede venir
+// con metodo "mixto" (desglose en ventas_pagos_detalle), un movimiento no.
+const MEDIO_LABEL: Record<MetodoPagoVenta, string> = {
   efectivo: "Efectivo",
   tarjeta: "Tarjeta",
   transferencia: "Transferencia",
+  mixto: "Mixto",
   otro: "Otro",
 };
 
@@ -50,7 +53,7 @@ type TimelineRow = {
   tipo: string;
   tipoClass: string;
   detalle: string;
-  medio: MedioPagoCaja | null;
+  medio: MetodoPagoVenta | null;
   monto: number;
   signo: 1 | -1;
   tachado?: boolean;

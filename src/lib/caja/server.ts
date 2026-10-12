@@ -13,6 +13,7 @@ import type {
   CajasReporte,
   EstadoCaja,
   MedioPagoCaja,
+  MetodoPagoVenta,
   TipoMovimientoCaja,
 } from "./types";
 import { calcularTotalArqueo, type ArqueoItem } from "./denominaciones";
@@ -436,7 +437,7 @@ export async function getDetalleCaja(
     id: v.id,
     numero_control: v.numero_control,
     fecha: v.fecha,
-    metodo_pago: (v.metodo_pago ?? "efectivo") as MedioPagoCaja,
+    metodo_pago: (v.metodo_pago ?? "efectivo") as MetodoPagoVenta,
     tipo_venta: v.tipo_venta,
     total: num(v.total),
     estado: v.estado,

@@ -3,7 +3,7 @@ import { getUserAndEmpresa } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { createVentaTransaccionalPg, StockInsuficienteError } from "@/lib/ventas/server/create-venta-pg";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
-import { insertVentaPagoDetalle } from "@/lib/ventas/server/pago-detalle-pg";
+import { insertVentaPagoDetalle, parseMetodoPagoDetalle } from "@/lib/ventas/server/pago-detalle-pg";
 import { actualizarSerie } from "@/lib/inventario/server/series-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
 
       if (pagosArr && pagosArr.length > 0) {
         for (const p of pagosArr) {
-          const m = typeof p.metodo_pago === "string" ? p.metodo_pago : "efectivo";
+          const m = parseMetodoPagoDetalle(p.metodo_pago);
           const monto = Number(p.monto);
           if (!Number.isFinite(monto) || monto <= 0) continue;
           await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
