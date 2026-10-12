@@ -55,6 +55,12 @@ export interface Producto {
   es_insumo?: boolean;
   /** Si false, no descuenta stock (ajustes/servicios). */
   controla_stock?: boolean;
+  /** Si true, se muestra en la tienda online. Se marca desde Inventario. */
+  visible_web?: boolean;
+  /** Orden en los listados de la tienda. Más bajo aparece antes. */
+  orden_web?: number | null;
+  /** Dirección del producto en la tienda. Si queda vacía, la arma la base. */
+  slug_web?: string | null;
   /** Si true, aparece en la sección "Productos destacados" del sitio público. */
   destacado?: boolean;
   /** Si true, aparece en el banner "Ofertas de la semana" del home público (máx 3). */

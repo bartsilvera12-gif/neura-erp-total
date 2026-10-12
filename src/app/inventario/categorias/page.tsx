@@ -15,11 +15,19 @@ interface Categoria {
   parent_id: string | null;
   activo: boolean;
   imagen_url: string | null;
+  /** Tienda online: aparece en el menú y la portada del sitio */
+  visible_web?: boolean;
+  /** Peso en la grilla de la portada: 1 normal, 2 bloque grande */
+  destaque_web?: number;
+  /** Bajada corta bajo el nombre, en la portada */
+  subtitulo_home?: string | null;
 }
 
 export default function CategoriasProductosPage() {
   const { isAdmin } = useIsAdmin();
   const [items, setItems] = useState<Categoria[]>([]);
+  /** Id de la categoría que se está guardando en la tienda */
+  const [tiendaGuardando, setTiendaGuardando] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -200,6 +208,33 @@ export default function CategoriasProductosPage() {
     }
   }
 
+  /**
+   * Publica una categoría en la tienda o cambia su peso en la portada.
+   *
+   * Vive en `categorias_productos`, no en una tabla del sitio: se marca donde
+   * se crea la categoría y el sitio la lee por su vista pública.
+   */
+  async function alternarTiendaCat(cat: Categoria, cambios: Partial<Categoria>) {
+    setTiendaGuardando(cat.id);
+    const antes = items;
+    setItems((lista) => lista.map((x) => (x.id === cat.id ? { ...x, ...cambios } : x)));
+
+    try {
+      const r = await fetch(`/api/inventario/categorias/${cat.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(cambios),
+      });
+      if (!r.ok) throw new Error("No se pudo guardar");
+    } catch (e) {
+      setItems(antes);
+      setError(e instanceof Error ? e.message : "No se pudo actualizar la tienda");
+    } finally {
+      setTiendaGuardando(null);
+    }
+  }
+
   async function toggleActivo(cat: Categoria) {
     const r = await fetch(`/api/inventario/categorias/${cat.id}`, {
       method: "PATCH",
@@ -340,6 +375,7 @@ export default function CategoriasProductosPage() {
                 <th className="text-left px-3 py-3 font-semibold">Código</th>
                 <th className="text-left px-3 py-3 font-semibold">Padre</th>
                 <th className="text-left px-3 py-3 font-semibold">Estado</th>
+                <th className="text-left px-3 py-3 font-semibold">Tienda</th>
                 <th className="px-3 py-3"></th>
               </tr>
             </thead>
@@ -386,6 +422,37 @@ export default function CategoriasProductosPage() {
                           Inactivo
                         </span>
                       )}
+                    </td>
+                    {/*
+                      Tienda online. La categoría se publica acá, donde se crea,
+                      y el sitio la lee por su vista pública. El bloque grande es
+                      el que ocupa doble espacio en la grilla de la portada.
+                    */}
+                    <td className="px-3 py-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="flex items-center gap-1.5 cursor-pointer" title="Mostrar en el menú y la portada de la tienda">
+                          <input
+                            type="checkbox"
+                            checked={c.visible_web !== false}
+                            disabled={tiendaGuardando === c.id}
+                            onChange={(e) => alternarTiendaCat(c, { visible_web: e.target.checked })}
+                            className="w-3.5 h-3.5 accent-sky-600 disabled:opacity-40"
+                          />
+                          <span className="text-[10px] font-semibold text-slate-600">En la tienda</span>
+                        </label>
+                        {c.visible_web !== false && (
+                          <label className="flex items-center gap-1.5 cursor-pointer" title="Ocupa doble espacio en la grilla de la portada">
+                            <input
+                              type="checkbox"
+                              checked={(c.destaque_web ?? 1) >= 2}
+                              disabled={tiendaGuardando === c.id}
+                              onChange={(e) => alternarTiendaCat(c, { destaque_web: e.target.checked ? 2 : 1 })}
+                              className="w-3.5 h-3.5 accent-sky-600 disabled:opacity-40"
+                            />
+                            <span className="text-[10px] text-slate-500">Bloque grande</span>
+                          </label>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-1.5">

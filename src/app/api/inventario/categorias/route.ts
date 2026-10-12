@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     let q = ctx.supabase
       .from("categorias_productos")
-      .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, created_at, updated_at")
+      .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, created_at, updated_at, imagen_url, visible_web, destaque_web, orden_web, subtitulo_home")
       .eq("empresa_id", ctx.auth.empresa_id)
       .order("nombre");
     if (!todas) q = q.eq("activo", true);
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         parent_id: body.parent_id == null ? null : String(body.parent_id),
         activo: body.activo === false ? false : true,
       })
-      .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, created_at, updated_at")
+      .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, created_at, updated_at, imagen_url, visible_web, destaque_web, orden_web, subtitulo_home")
       .single();
     if (ins.error) {
       const msg = ins.error.message ?? "";

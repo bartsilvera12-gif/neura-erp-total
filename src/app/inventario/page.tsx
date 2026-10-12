@@ -87,6 +87,58 @@ export default function InventarioPage() {
   const [total, setTotal] = useState(0);
   const [categorias, setCategorias] = useState<CategoriaLite[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Id del producto que se está guardando en la tienda, para no tocarlo dos veces */
+  const [tiendaGuardando, setTiendaGuardando] = useState<string | null>(null);
+  const [tiendaError, setTiendaError] = useState<string | null>(null);
+
+  /**
+   * Publica o saca un producto de la tienda online, o lo marca como destacado.
+   *
+   * La decisión vive en `productos`, no en una tabla del sitio: así se marca
+   * acá, con el producto a la vista, y el sitio la lee por su vista pública.
+   * La dirección del producto la arma la base si está vacía.
+   */
+  async function alternarTienda(
+    p: Producto,
+    campo: "visible_web" | "destacado",
+    valor: boolean,
+  ) {
+    setTiendaGuardando(p.id);
+    setTiendaError(null);
+
+    // Optimista: el check responde al instante y se revierte si falla
+    const antes = productos;
+    setProductos((lista) =>
+      lista.map((x) =>
+        x.id === p.id
+          ? { ...x, [campo]: valor, ...(campo === "visible_web" && !valor ? { destacado: false } : {}) }
+          : x,
+      ),
+    );
+
+    try {
+      const cuerpo: Record<string, unknown> = { [campo]: valor };
+      // Sacarlo de la tienda también lo saca de los destacados: no tendría dónde verse
+      if (campo === "visible_web" && !valor) cuerpo.destacado = false;
+
+      const r = await fetch(`/api/productos/${p.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error ?? "No se pudo guardar");
+      }
+    } catch (e) {
+      setProductos(antes);
+      setTiendaError(
+        e instanceof Error ? e.message : "No se pudo actualizar la tienda",
+      );
+    } finally {
+      setTiendaGuardando(null);
+    }
+  }
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Filtros / paginacion
@@ -367,6 +419,12 @@ export default function InventarioPage() {
           )}
         </div>
 
+        {tiendaError && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {tiendaError}
+          </div>
+        )}
+
         {/* Tabla */}
         <EdgeScrollArea>
           <table className="w-full min-w-[820px] text-left text-sm">
@@ -380,20 +438,21 @@ export default function InventarioPage() {
                 <th className="px-3 py-3 text-center">Stock</th>
                 <th className="hidden px-3 py-3 text-right lg:table-cell">Margen</th>
                 <th className="hidden px-3 py-3 text-center lg:table-cell">Valuación</th>
+                <th className="px-3 py-3 text-center">Tienda</th>
                 <th className="px-5 py-3 text-center">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && productos.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-16 text-center">
+                  <td colSpan={10} className="px-5 py-16 text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
                     <p className="mt-2 text-xs text-slate-500">Cargando productos...</p>
                   </td>
                 </tr>
               ) : productosMostrados.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-16 text-center">
+                  <td colSpan={10} className="px-5 py-16 text-center">
                     <Package className="mx-auto h-8 w-8 text-slate-300" />
                     <p className="mt-3 text-sm font-medium text-slate-700">
                       No se encontraron productos
@@ -496,6 +555,44 @@ export default function InventarioPage() {
                         >
                           {p.metodo_valuacion}
                         </span>
+                      </td>
+                      {/*
+                        Tienda online. Se decide acá, con el producto a la vista:
+                        el sitio lee `visible_web` y no hay que entrar a otro panel.
+                        El destacado va al lado porque solo tiene sentido si está publicado.
+                      */}
+                      <td className="px-3 py-3.5">
+                        <div className="flex flex-col items-center gap-1">
+                          <label
+                            className="flex cursor-pointer items-center gap-1.5"
+                            title={p.es_vendible === false
+                              ? "Los insumos no se publican en la tienda"
+                              : "Mostrar este producto en la tienda online"}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(p.visible_web)}
+                              disabled={p.es_vendible === false || tiendaGuardando === p.id}
+                              onChange={(e) => alternarTienda(p, "visible_web", e.target.checked)}
+                              className="h-3.5 w-3.5 accent-[#4FAEB2] disabled:opacity-40"
+                            />
+                            <span className="text-[10px] font-semibold text-slate-600">
+                              En la tienda
+                            </span>
+                          </label>
+                          {p.visible_web && (
+                            <label className="flex cursor-pointer items-center gap-1.5" title="Aparece en «Elegidos de Total», en la portada">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(p.destacado)}
+                                disabled={tiendaGuardando === p.id}
+                                onChange={(e) => alternarTienda(p, "destacado", e.target.checked)}
+                                className="h-3.5 w-3.5 accent-[#4FAEB2] disabled:opacity-40"
+                              />
+                              <span className="text-[10px] text-slate-500">Destacado</span>
+                            </label>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-center gap-1">

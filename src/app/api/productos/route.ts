@@ -18,6 +18,7 @@ const PRODUCTO_COLS =
   // TOTAL: marca, linea de producto, manejo por numero de serie.
   "marca_id, linea_id, maneja_series, garantia_meses, " +
   "es_vendible, es_insumo, controla_stock, destacado, oferta_semana_destacada, valorizado, unidad_compra, unidad_receta, " +
+  "visible_web, orden_web, slug_web, " +
   "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
   "discount_type, discount_value, discount_starts_at, discount_ends_at";
 
@@ -188,6 +189,10 @@ export async function POST(request: NextRequest) {
     const esInsumo = typeof body.es_insumo === "boolean" ? body.es_insumo : undefined;
     const controlaStock = typeof body.controla_stock === "boolean" ? body.controla_stock : undefined;
     const destacado = typeof body.destacado === "boolean" ? body.destacado : undefined;
+    // Tienda online: se decide acá, en el ERP, no en el panel de la web
+    const visibleWeb = typeof body.visible_web === "boolean" ? body.visible_web : undefined;
+    const ordenWeb = Number.isFinite(Number(body.orden_web)) ? Number(body.orden_web) : undefined;
+    const slugWeb = typeof body.slug_web === "string" ? body.slug_web.trim() || null : undefined;
     const discountType =
       body.discount_type === "percentage" || body.discount_type === "fixed"
         ? body.discount_type
@@ -269,6 +274,9 @@ export async function POST(request: NextRequest) {
     if (esInsumo !== undefined) insertPayload.es_insumo = esInsumo;
     if (controlaStock !== undefined) insertPayload.controla_stock = controlaStock;
     if (destacado !== undefined) insertPayload.destacado = destacado;
+    if (visibleWeb !== undefined) insertPayload.visible_web = visibleWeb;
+    if (ordenWeb !== undefined) insertPayload.orden_web = ordenWeb;
+    if (slugWeb !== undefined) insertPayload.slug_web = slugWeb;
     if (discountType !== undefined) insertPayload.discount_type = discountType;
     if (discountValue !== undefined) insertPayload.discount_value = discountValue;
     if (discountStartsAt !== undefined) insertPayload.discount_starts_at = discountStartsAt;

@@ -12,6 +12,7 @@ const PRODUCTO_COLS =
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "marca_id, linea_id, maneja_series, garantia_meses, " +
   "es_vendible, es_insumo, controla_stock, destacado, oferta_semana_destacada, discount_type, discount_value, discount_starts_at, discount_ends_at, valorizado, unidad_compra, unidad_receta, " +
+  "visible_web, orden_web, slug_web, " +
   "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
 
 function toNumber(v: unknown): unknown {
@@ -167,6 +168,10 @@ export async function PATCH(
     if (typeof body.es_insumo === "boolean") patch.es_insumo = body.es_insumo;
     if (typeof body.controla_stock === "boolean") patch.controla_stock = body.controla_stock;
     if (typeof body.destacado === "boolean") patch.destacado = body.destacado;
+    // Tienda online. El slug lo arma la base si va vacío (trigger en el schema).
+    if (typeof body.visible_web === "boolean") patch.visible_web = body.visible_web;
+    if (Number.isFinite(Number(body.orden_web))) patch.orden_web = Number(body.orden_web);
+    if (typeof body.slug_web === "string") patch.slug_web = body.slug_web.trim() || null;
     if (typeof body.oferta_semana_destacada === "boolean") patch.oferta_semana_destacada = body.oferta_semana_destacada;
     if (body.discount_type !== undefined) {
       patch.discount_type =

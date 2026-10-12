@@ -20,6 +20,16 @@ export async function PATCH(
     if (body.descripcion !== undefined) patch.descripcion = normalizeUpperNullable(body.descripcion);
     if (body.parent_id !== undefined) patch.parent_id = body.parent_id == null ? null : String(body.parent_id);
     if (body.activo !== undefined) patch.activo = body.activo === true;
+    // Tienda online: se decide desde Inventario del ERP, no desde el sitio
+    if (body.visible_web !== undefined) patch.visible_web = body.visible_web === true;
+    if (body.destaque_web !== undefined) patch.destaque_web = Number(body.destaque_web) >= 2 ? 2 : 1;
+    if (body.orden_web !== undefined && Number.isFinite(Number(body.orden_web))) {
+      patch.orden_web = Number(body.orden_web);
+    }
+    if (body.subtitulo_home !== undefined) {
+      const v = body.subtitulo_home == null ? null : String(body.subtitulo_home).trim();
+      patch.subtitulo_home = v && v.length > 0 ? v : null;
+    }
     if (body.imagen_url !== undefined) {
       const v = body.imagen_url == null ? null : String(body.imagen_url).trim();
       patch.imagen_url = v && v.length > 0 ? v : null;
@@ -28,7 +38,7 @@ export async function PATCH(
     if (Object.keys(patch).length === 0) {
       const { data, error } = await ctx.supabase
         .from("categorias_productos")
-        .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, imagen_url, created_at, updated_at")
+        .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, imagen_url, created_at, updated_at, visible_web, destaque_web, orden_web, subtitulo_home")
         .eq("empresa_id", ctx.auth.empresa_id)
         .eq("id", id)
         .maybeSingle();
@@ -42,7 +52,7 @@ export async function PATCH(
       .update(patch)
       .eq("empresa_id", ctx.auth.empresa_id)
       .eq("id", id)
-      .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, imagen_url, created_at, updated_at")
+      .select("id, empresa_id, nombre, codigo, descripcion, parent_id, activo, imagen_url, created_at, updated_at, visible_web, destaque_web, orden_web, subtitulo_home")
       .maybeSingle();
     if (upd.error) {
       const msg = upd.error.message ?? "";
