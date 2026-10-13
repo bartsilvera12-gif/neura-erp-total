@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
   LayoutDashboard,
   ShoppingBag,
   ShoppingCart,
@@ -105,14 +106,13 @@ const MENU_STRUCTURE: MenuItem[] = [
   { key: "cobranzas", slug: "cobros", label: "Cobranzas", href: "/cobros", icon: Wallet },
   { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Banknote },
   { key: "gastos", slug: "gastos", label: "Gastos", href: "/gastos", icon: Receipt },
+  // Gerencia: portado de neura-erp-sistemas-propio, sin la parte de
+  // suscripciones (MRR, recurrentes), que no aplica a una casa de
+  // electrodomesticos.
+  { key: "gerencia", slug: "gerencia", label: "Gerencia", href: "/gerencia", icon: Activity },
   { key: "reportes", slug: "reportes", label: "Reportes", href: "/reportes", icon: BarChart3 },
   { key: "notas_credito", slug: "notas_credito", label: "Notas de crédito", href: "/notas-credito", icon: ScrollText },
-  // Gerencia y Tableros: PENDIENTES DE DEFINIR.
-  // El cliente los pidio, pero en los ERP hermanos leen de `proyectos`,
-  // `proyecto_tareas`, `proyecto_estados` y demas: tablas que no existen en
-  // este schema. Son vistas de gestion de proyectos con SLA y QA, pensadas
-  // para una empresa de software. Hay que definir que significan estos dos
-  // modulos para una casa de electrodomesticos antes de construirlos.
+  // Tableros: el cliente lo pidio y quedo descartado a pedido suyo.
   // Usuarios: ruta accesible por URL (/usuarios), fuera del menu a proposito.
   {
     key: "configuracion",
@@ -135,7 +135,7 @@ const MENU_STRUCTURE: MenuItem[] = [
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["ventas", "clientes", "pedidos_web"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["cobranzas", "pagos", "gastos", "notas_credito", "reportes"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["cobranzas", "pagos", "gastos", "notas_credito", "gerencia", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
 ];

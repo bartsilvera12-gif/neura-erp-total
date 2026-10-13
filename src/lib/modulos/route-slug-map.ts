@@ -14,6 +14,7 @@ const SIDEBAR_SLUG_HREF_ORDER: { slug: string; href: string }[] = [
   { slug: "cobros", href: "/cobros" },
   { slug: "pagos", href: "/pagos" },
   { slug: "gastos", href: "/gastos" },
+  { slug: "gerencia", href: "/gerencia" },
   { slug: "reportes", href: "/reportes" },
   { slug: "notas_credito", href: "/notas-credito" },
   { slug: "usuarios", href: "/usuarios" },
@@ -94,6 +95,7 @@ export function pathRequiresModuleSlug(pathname: string): string | null {
   if (p.startsWith("/proveedores")) return "compras";
   if (p.startsWith("/compras")) return "compras";
   if (p.startsWith("/gastos")) return "gastos";
+  if (p.startsWith("/gerencia")) return "gerencia";
   if (p.startsWith("/reportes")) return "reportes";
   if (p.startsWith("/pagos")) return "pagos";
   if (p.startsWith("/configuracion")) return "configuracion";
