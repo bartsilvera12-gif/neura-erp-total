@@ -43,6 +43,7 @@ export type GerenciaReporte = {
     ticket_promedio: number;
     ventas_mes: number;
     margen_mes: number;
+    /** Margen sobre el neto (subtotal sin IVA), no sobre el total facturado. */
     margen_pct: number | null;
     variacion_facturado_pct: number | null;
   };

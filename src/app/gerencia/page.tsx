@@ -140,7 +140,7 @@ export default function GerenciaPage() {
               label="Margen del mes"
               value={gs(k?.margen_mes)}
               icon={<Percent className="h-4 w-4" />}
-              hint={k?.margen_pct == null ? "sin ventas" : `${k.margen_pct.toFixed(1)}% sobre la venta`}
+              hint={k?.margen_pct == null ? "sin ventas" : `${k.margen_pct.toFixed(1)}% sobre el neto`}
             />
           </div>
 
@@ -194,7 +194,12 @@ export default function GerenciaPage() {
                 return (
                   <div key={m.mes} className="flex flex-col items-center gap-1.5">
                     <span className="text-[10px] tabular-nums text-slate-400">
-                      {m.facturado > 0 ? Math.round(m.facturado / 1_000_000) + "M" : ""}
+                      {/* Menos de un millón redondeaba a "0M". */}
+                      {m.facturado >= 1_000_000
+                        ? Math.round(m.facturado / 1_000_000) + "M"
+                        : m.facturado > 0
+                        ? Math.round(m.facturado / 1_000) + "k"
+                        : ""}
                     </span>
                     <div
                       style={{ height: `${alto}px` }}
