@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCompras } from "@/lib/compras/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -100,9 +101,17 @@ export default function ComprasPage() {
   const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [filtroTipoPago, setFiltroTipoPago] = useState<TipoPago | "">("");
+  /**
+   * Las anuladas quedaban mezcladas con las vigentes, tachadas. Por defecto se
+   * muestran solo las vigentes; "Anuladas" las aisla y "Todas" vuelve a verlas
+   * juntas, para cuando hay que buscar una en particular.
+   */
+  const [filtroAnuladas, setFiltroAnuladas] = useState<"vigentes" | "anuladas" | "todas">("vigentes");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [anularTarget, setAnularTarget] = useState<{ numero_oc: string; estado: EstadoOrdenCompra } | null>(null);
   const [anularCompraTarget, setAnularCompraTarget] = useState<{ numero_control: string; total: number } | null>(null);
+  const [borrandoCompra, setBorrandoCompra] = useState<string | null>(null);
+  const [avisoCompra, setAvisoCompra] = useState<string | null>(null);
   const [editarCompraTarget, setEditarCompraTarget] = useState<{ numero_control: string; numero_factura: string; fecha_factura: string; nro_timbrado: string; observacion: string } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -112,6 +121,31 @@ export default function ComprasPage() {
     getOrdenesCompra().then((data) => { if (!cancel) setOrdenes(data); });
     return () => { cancel = true; };
   }, [reloadKey]);
+
+  /**
+   * Borra definitivamente una compra ya anulada. El servidor rechaza borrar
+   * una vigente: para eso esta Anular, que es lo que devuelve el stock.
+   */
+  async function borrarCompra(numeroControl: string) {
+    if (!window.confirm(`¿Borrar definitivamente la compra ${numeroControl}? Ya está anulada, así que el stock no cambia.`)) return;
+    setBorrandoCompra(numeroControl);
+    setAvisoCompra(null);
+    try {
+      const r = await fetchWithSupabaseSession(`/api/compras/${encodeURIComponent(numeroControl)}`, {
+        method: "DELETE",
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setAvisoCompra(j?.error ?? "No se pudo borrar la compra.");
+        return;
+      }
+      setReloadKey((k) => k + 1);
+    } catch {
+      setAvisoCompra("No se pudo conectar.");
+    } finally {
+      setBorrandoCompra(null);
+    }
+  }
 
   const grupos = useMemo(() => agrupar(todas), [todas]);
 
@@ -139,11 +173,15 @@ export default function ComprasPage() {
         ...g.items.map((i) => i.producto_nombre),
       );
       const coincideTipoPago = filtroTipoPago === "" || g.tipo_pago === filtroTipoPago;
-      return coincideTexto && coincideTipoPago;
+      const coincideAnulada =
+        filtroAnuladas === "todas" ||
+        (filtroAnuladas === "anuladas" ? g.anulada : !g.anulada);
+      return coincideTexto && coincideTipoPago && coincideAnulada;
     });
-  }, [grupos, busqueda, filtroTipoPago]);
+  }, [grupos, busqueda, filtroTipoPago, filtroAnuladas]);
 
-  const hayFiltros = busqueda || filtroTipoPago;
+  const cuantasAnuladas = useMemo(() => grupos.filter((g) => g.anulada).length, [grupos]);
+  const hayFiltros = busqueda || filtroTipoPago || filtroAnuladas !== "vigentes";
 
   function toggle(numero: string) {
     setExpandidos((prev) => {
@@ -266,6 +304,13 @@ export default function ComprasPage() {
           </div>
         </div>
 
+        {avisoCompra && (
+          <div className="mb-4 flex items-start justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <span>{avisoCompra}</span>
+            <button onClick={() => setAvisoCompra(null)} className="shrink-0 text-rose-400 hover:text-rose-600">×</button>
+          </div>
+        )}
+
         {/* Filtros */}
         <div className="flex flex-wrap items-center gap-3 mb-5 pb-5 border-b border-gray-100">
           <input type="text" placeholder="Buscar por proveedor, N° de factura, producto o N° control..."
@@ -278,8 +323,15 @@ export default function ComprasPage() {
               { value: "contado", label: "Contado" },
               { value: "credito", label: "Crédito" },
             ]} />
+          <FancySelect value={filtroAnuladas} onChange={(v) => setFiltroAnuladas(v as "vigentes" | "anuladas" | "todas")}
+            ariaLabel="Mostrar compras anuladas" className="w-48" size="sm"
+            options={[
+              { value: "vigentes", label: "Solo vigentes" },
+              { value: "anuladas", label: `Anuladas${cuantasAnuladas ? ` (${cuantasAnuladas})` : ""}` },
+              { value: "todas", label: "Vigentes y anuladas" },
+            ]} />
           {hayFiltros && (
-            <button onClick={() => { setBusqueda(""); setFiltroTipoPago(""); }}
+            <button onClick={() => { setBusqueda(""); setFiltroTipoPago(""); setFiltroAnuladas("vigentes"); }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2">
               Limpiar filtros
             </button>
@@ -369,7 +421,16 @@ export default function ComprasPage() {
                         <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
                         <td className="py-4 text-center" onClick={(e) => e.stopPropagation()}>
                           {g.anulada ? (
-                            <span className="text-xs italic text-slate-400 no-underline">Sin acciones</span>
+                            /* Ya anulada: el stock volvio al anular, asi que
+                               borrarla solo limpia el listado. */
+                            <button
+                              type="button"
+                              onClick={() => void borrarCompra(g.numero_control)}
+                              disabled={borrandoCompra === g.numero_control}
+                              className="text-xs font-semibold text-rose-600 no-underline hover:underline disabled:opacity-40"
+                            >
+                              {borrandoCompra === g.numero_control ? "Borrando…" : "Borrar"}
+                            </button>
                           ) : (
                             <div className="inline-flex items-center gap-3">
                               <button

@@ -24,6 +24,7 @@ import type { Cliente, TipoCliente, OrigenCliente } from "@/lib/clientes/types";
 import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDatosSifenReceptorForm";
 import type { ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
+import { normalizarConservandoCursor, correoValido, nombrePersonaValido } from "@/lib/forms/cursor";
 import type { Plan } from "@/lib/planes/types";
 
 /**
@@ -191,11 +192,23 @@ function NuevoClienteForm() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) {
     setError(null);
-    const { name, value } = e.target;
+    const { name } = e.target;
     const type = (e.target as HTMLInputElement).type;
-    let normalized = value;
-    if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    const el = e.target as HTMLInputElement | HTMLTextAreaElement;
+
+    // Pasar a mayusculas o minusculas mandaba el cursor al final: escribir en
+    // el medio de un campo ya cargado desordenaba el texto.
+    const normalized =
+      el instanceof HTMLSelectElement
+        ? el.value
+        : normalizarConservandoCursor(el, (v) =>
+            lower.includes(name) || type === "email"
+              ? v.toLowerCase()
+              : upper.includes(name)
+              ? v.toUpperCase()
+              : v
+          );
+
     setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
@@ -205,6 +218,15 @@ function NuevoClienteForm() {
 
     if (!form.nombre_contacto.trim())                              return setError("El nombre de contacto es obligatorio.");
     if (form.tipo_cliente === "empresa" && !form.empresa.trim())   return setError("La razón social es obligatoria para empresas.");
+    // Validaciones de forma, a pedido de QA: el formulario aceptaba un correo
+    // sin arroba o un nombre con numeros y recien fallaba (o no) mas adelante.
+    if (!nombrePersonaValido(form.nombre_contacto))
+      return setError("El nombre de contacto va con letras, sin números.");
+    if (form.email.trim() && !correoValido(form.email))
+      return setError("El correo no tiene un formato válido. Ej: nombre@dominio.com");
+    if (form.email_secundario.trim() && !correoValido(form.email_secundario))
+      return setError("El correo secundario no tiene un formato válido.");
+
 
     if (form.condicion_pago === "MENSUAL" && form.estado === "activo") {
       const dur = parseInt(formSusc.duracion_meses, 10) || 0;

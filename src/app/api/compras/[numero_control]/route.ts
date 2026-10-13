@@ -9,6 +9,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import {
+  borrarCompraAnulada,
   editarCompraCompleta,
   getCompraByNumeroControl,
   type CompraHeaderInput,
@@ -112,5 +113,31 @@ export async function PUT(
     console.error("[/api/compras/[numero_control] PUT]", msg);
     const status = /no encontrada|pagos registrados|al menos un producto|falta|mayor a 0/i.test(msg) ? 400 : 500;
     return NextResponse.json(errorResponse(msg), { status });
+  }
+}
+
+/**
+ * DELETE — borra definitivamente una compra ya anulada.
+ *
+ * Una compra vigente no se borra: se anula, que es lo que devuelve el stock.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctx: { params: Promise<{ numero_control: string }> }
+) {
+  try {
+    const tenant = await getTenantSupabaseFromAuth(request);
+    if (!tenant) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const schema = await fetchDataSchemaForEmpresaId(tenant.auth.empresa_id);
+    const { numero_control } = await ctx.params;
+
+    await borrarCompraAnulada(schema, tenant.auth.empresa_id, decodeURIComponent(numero_control));
+    return NextResponse.json(successResponse({ ok: true }));
+  } catch (err) {
+    console.error("[api/compras/[numero_control]] DELETE:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      errorResponse(err instanceof Error ? err.message : "No se pudo borrar la compra."),
+      { status: 400 }
+    );
   }
 }

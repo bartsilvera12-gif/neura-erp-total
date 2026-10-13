@@ -54,6 +54,7 @@ import {
 } from "@/components/clientes/ClientePerfilTributarioForm";
 import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDatosSifenReceptorForm";
 import { getPlanes } from "@/lib/planes/storage";
+import { normalizarConservandoCursor, correoValido, nombrePersonaValido } from "@/lib/forms/cursor";
 import type { Plan } from "@/lib/planes/types";
 
 /** Ferrecolor usa el formulario/detalle de clientes SIMPLE (ferretería): oculta los
@@ -547,11 +548,22 @@ export default function ClienteDetailPage() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     setFormError(null);
-    const { name, value } = e.target;
+    const { name } = e.target;
     const type = (e.target as HTMLInputElement).type;
-    let normalized = value;
-    if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    const el = e.target as HTMLInputElement | HTMLTextAreaElement;
+
+    // Ver el comentario en normalizarConservandoCursor: sin esto el cursor
+    // salta al final y escribir en el medio desordena el texto.
+    const normalized = el instanceof HTMLSelectElement
+      ? el.value
+      : normalizarConservandoCursor(el, (v) =>
+          lower.includes(name) || type === "email"
+            ? v.toLowerCase()
+            : upper.includes(name)
+            ? v.toUpperCase()
+            : v
+        );
+
     setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
@@ -560,6 +572,15 @@ export default function ClienteDetailPage() {
     setFormError(null);
     if (!form.nombre_contacto.trim())                             return setFormError("El contacto es obligatorio.");
     if (form.tipo_cliente === "empresa" && !form.empresa.trim())  return setFormError("La razón social es obligatoria para empresas.");
+    // Validaciones de forma, a pedido de QA: el formulario aceptaba un correo
+    // sin arroba o un nombre con numeros y recien fallaba (o no) mas adelante.
+    if (!nombrePersonaValido(form.nombre_contacto))
+      return setFormError("El nombre de contacto va con letras, sin números.");
+    if (form.email.trim() && !correoValido(form.email))
+      return setFormError("El correo no tiene un formato válido. Ej: nombre@dominio.com");
+    if (form.email_secundario.trim() && !correoValido(form.email_secundario))
+      return setFormError("El correo secundario no tiene un formato válido.");
+
 
     // Solo validar creación de suscripción cuando: MENSUAL + activo + NO tiene suscripciones
     if (form.condicion_pago === "MENSUAL" && form.estado === "activo" && suscripciones.length === 0) {

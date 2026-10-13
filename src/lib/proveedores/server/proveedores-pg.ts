@@ -409,3 +409,47 @@ export async function borrarProveedorSiNoTieneCompras(
   ]);
   return { borrado: true, compras: 0 };
 }
+
+/**
+ * Borra una categoría de proveedor y la desasigna de los que la tenían.
+ *
+ * Se borra de verdad: una categoría no es un dato histórico, es una etiqueta.
+ * Lo único que hay que limpiar son las relaciones, para no dejar filas
+ * apuntando a algo que ya no existe. Devuelve a cuántos proveedores afectó,
+ * para poder avisarlo antes de que lo noten.
+ */
+export async function borrarProveedorCategoria(
+  schemaRaw: string,
+  empresaId: string,
+  categoriaId: string
+): Promise<{ proveedores: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tCat = quoteSchemaTable(schema, "proveedor_categorias");
+  const tRel = quoteSchemaTable(schema, "proveedor_categoria_rel");
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows } = await client.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM ${tRel} WHERE categoria_id = $1::uuid`,
+      [categoriaId]
+    );
+    const proveedores = Number(rows[0]?.n ?? 0);
+
+    await client.query(`DELETE FROM ${tRel} WHERE categoria_id = $1::uuid`, [categoriaId]);
+    const del = await client.query(
+      `DELETE FROM ${tCat} WHERE empresa_id = $1::uuid AND id = $2::uuid`,
+      [empresaId, categoriaId]
+    );
+    if (del.rowCount === 0) throw new Error("Categoría no encontrada.");
+
+    await client.query("COMMIT");
+    return { proveedores };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

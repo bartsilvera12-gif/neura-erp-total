@@ -759,3 +759,78 @@ export async function getCompraByNumeroControl(
   };
   return { header, items: rows as Record<string, unknown>[] };
 }
+
+/**
+ * Borra definitivamente una compra YA ANULADA.
+ *
+ * Solo se permite sobre una compra anulada: la anulación es la que devuelve el
+ * stock y revierte los movimientos. Borrar una compra vigente dejaría el
+ * inventario inflado sin rastro de por qué, así que no se permite — para eso
+ * está Anular.
+ *
+ * Se borran también sus movimientos de inventario (ya compensados), las cuotas
+ * y la cuenta por pagar. Transaccional: o se va todo, o no se va nada.
+ */
+export async function borrarCompraAnulada(
+  schemaRaw: string,
+  empresaId: string,
+  numeroControl: string
+): Promise<{ ok: true }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tCom = quoteSchemaTable(schema, "compras");
+  const tMov = quoteSchemaTable(schema, "movimientos_inventario");
+  const tCuo = quoteSchemaTable(schema, "compra_cuotas");
+  const tCxp = quoteSchemaTable(schema, "cuentas_por_pagar");
+  const tPag = quoteSchemaTable(schema, "pagos_proveedores");
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows } = await client.query<{ anulada_at: string | null }>(
+      `SELECT anulada_at FROM ${tCom}
+        WHERE empresa_id = $1::uuid AND numero_control = $2
+        LIMIT 1 FOR UPDATE`,
+      [empresaId, numeroControl]
+    );
+    if (rows.length === 0) throw new Error("La compra no existe.");
+    if (!rows[0].anulada_at) {
+      throw new Error(
+        "Solo se pueden borrar compras anuladas. Anulá la compra primero: eso devuelve el stock."
+      );
+    }
+
+    // Las cuentas por pagar de esta compra, con sus cuotas y pagos.
+    const { rows: cxp } = await client.query<{ id: string }>(
+      `SELECT id FROM ${tCxp} WHERE empresa_id = $1::uuid AND compra_numero_control = $2`,
+      [empresaId, numeroControl]
+    );
+    for (const c of cxp) {
+      await client.query(`DELETE FROM ${tPag} WHERE cuenta_por_pagar_id = $1::uuid`, [c.id]);
+      await client.query(`DELETE FROM ${tCuo} WHERE cuenta_por_pagar_id = $1::uuid`, [c.id]);
+    }
+    await client.query(
+      `DELETE FROM ${tCxp} WHERE empresa_id = $1::uuid AND compra_numero_control = $2`,
+      [empresaId, numeroControl]
+    );
+
+    await client.query(
+      `DELETE FROM ${tMov}
+        WHERE empresa_id = $1::uuid AND origen = 'compra' AND referencia = $2`,
+      [empresaId, numeroControl]
+    );
+
+    await client.query(
+      `DELETE FROM ${tCom} WHERE empresa_id = $1::uuid AND numero_control = $2`,
+      [empresaId, numeroControl]
+    );
+
+    await client.query("COMMIT");
+    return { ok: true };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}

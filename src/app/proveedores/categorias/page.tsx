@@ -8,6 +8,7 @@ import {
   createCategoriaProveedor,
   updateCategoriaProveedor,
 } from "@/lib/proveedores/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { ProveedorCategoria } from "@/lib/proveedores/types";
 
 const inputClass =
@@ -19,6 +20,8 @@ export default function ProveedorCategoriasPage() {
   const [descripcion, setDescripcion] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [borrando, setBorrando] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editDesc, setEditDesc] = useState("");
 
@@ -70,6 +73,33 @@ export default function ProveedorCategoriasPage() {
     await reload();
   }
 
+  /**
+   * Borra la categoría. El servidor la quita además de los proveedores que la
+   * tenían asignada, y dice a cuántos afectó.
+   */
+  async function eliminarCategoria(c: ProveedorCategoria) {
+    if (!window.confirm(`¿Eliminar la categoría "${c.nombre}"?`)) return;
+    setBorrando(c.id);
+    setError(null);
+    setAviso(null);
+    try {
+      const r = await fetchWithSupabaseSession(`/api/proveedores/categorias/${c.id}`, {
+        method: "DELETE",
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setError(j?.error ?? "No se pudo eliminar la categoría.");
+        return;
+      }
+      setAviso(j.data?.mensaje ?? "Categoría eliminada.");
+      await reload();
+    } catch {
+      setError("No se pudo conectar.");
+    } finally {
+      setBorrando(null);
+    }
+  }
+
   async function toggleActivo(c: ProveedorCategoria) {
     const res = await updateCategoriaProveedor(c.id, { activo: !c.activo });
     if (!res.ok) setError(res.error);
@@ -110,6 +140,11 @@ export default function ProveedorCategoriasPage() {
           <input className={inputClass} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {aviso && (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {aviso}
+          </p>
+        )}
         <button
           type="submit"
           className="rounded-lg bg-[#0EA5E9] px-4 py-2 text-sm font-medium text-white hover:bg-[#0284C7]"
@@ -171,13 +206,23 @@ export default function ProveedorCategoriasPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => startEdit(c)}
-                      className="text-sky-600 font-medium hover:underline"
-                    >
-                      Editar
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        className="text-sky-600 font-medium hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void eliminarCategoria(c)}
+                        disabled={borrando === c.id}
+                        className="font-medium text-rose-600 hover:underline disabled:opacity-40"
+                      >
+                        {borrando === c.id ? "Eliminando…" : "Eliminar"}
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

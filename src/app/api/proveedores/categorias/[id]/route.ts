@@ -3,7 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import { updateProveedorCategoria } from "@/lib/proveedores/server/proveedores-pg";
+import { updateProveedorCategoria, borrarProveedorCategoria } from "@/lib/proveedores/server/proveedores-pg";
 import { normalizeUpperText, normalizeUpperNullable } from "@/lib/text/normalize";
 
 export async function PATCH(
@@ -50,5 +50,32 @@ export async function PATCH(
   } catch (err) {
     console.error("[/api/proveedores/categorias/[id] PATCH] outer", err);
     return NextResponse.json(errorResponse("No se pudo actualizar la categoría."), { status: 500 });
+  }
+}
+
+/** DELETE — borra la categoría y la saca de los proveedores que la tenían. */
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const tenant = await getTenantSupabaseFromAuth(request);
+    if (!tenant) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const schema = await fetchDataSchemaForEmpresaId(tenant.auth.empresa_id);
+    const { id } = await ctx.params;
+
+    const { proveedores } = await borrarProveedorCategoria(schema, tenant.auth.empresa_id, id);
+
+    return NextResponse.json(
+      successResponse({
+        mensaje:
+          proveedores > 0
+            ? `Categoría eliminada. Se quitó de ${proveedores} proveedor${proveedores === 1 ? "" : "es"}.`
+            : "Categoría eliminada.",
+      })
+    );
+  } catch (err) {
+    console.error("[api/proveedores/categorias/[id]] DELETE:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      errorResponse(err instanceof Error ? err.message : "No se pudo eliminar la categoría."),
+      { status: 500 }
+    );
   }
 }
