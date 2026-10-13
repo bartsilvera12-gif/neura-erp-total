@@ -196,17 +196,16 @@ function NuevoClienteForm() {
     const type = (e.target as HTMLInputElement).type;
     const el = e.target as HTMLInputElement | HTMLTextAreaElement;
 
-    // Pasar a mayusculas o minusculas mandaba el cursor al final: escribir en
-    // el medio de un campo ya cargado desordenaba el texto.
+    // Pasar a mayusculas mandaba el cursor al final: escribir en el medio de
+    // un campo ya cargado desordenaba el texto.
+    // OJO: un input type="email" (y type="number") no soporta selectionStart,
+    // asi que ahi el cursor no se puede devolver a su lugar. Por eso el correo
+    // NO se pasa a minusculas mientras se escribe: se normaliza al guardar.
     const normalized =
       el instanceof HTMLSelectElement
         ? el.value
         : normalizarConservandoCursor(el, (v) =>
-            lower.includes(name) || type === "email"
-              ? v.toLowerCase()
-              : upper.includes(name)
-              ? v.toUpperCase()
-              : v
+            upper.includes(name) ? v.toUpperCase() : v
           );
 
     setForm((prev) => ({ ...prev, [name]: normalized }));
@@ -333,8 +332,8 @@ function NuevoClienteForm() {
       // Los secundarios tenian campo en el formulario pero no viajaban en el
       // alta: lo que se cargaba ahi se perdia sin aviso.
       telefono_secundario: form.telefono_secundario.trim() || undefined,
-      email: form.email.trim() || undefined,
-      email_secundario: form.email_secundario.trim() || undefined,
+      email: form.email.trim().toLowerCase() || undefined,
+      email_secundario: form.email_secundario.trim().toLowerCase() || undefined,
       direccion: form.direccion.trim() || undefined,
       ciudad: form.ciudad.trim().toUpperCase() || undefined,
       pais: form.pais.trim().toUpperCase() || undefined,

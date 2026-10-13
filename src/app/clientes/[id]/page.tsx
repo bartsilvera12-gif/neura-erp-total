@@ -552,16 +552,14 @@ export default function ClienteDetailPage() {
     const type = (e.target as HTMLInputElement).type;
     const el = e.target as HTMLInputElement | HTMLTextAreaElement;
 
-    // Ver el comentario en normalizarConservandoCursor: sin esto el cursor
-    // salta al final y escribir en el medio desordena el texto.
+    // Ver normalizarConservandoCursor: sin esto el cursor salta al final.
+    // OJO: un input type="email" (y type="number") no soporta selectionStart,
+    // asi que ahi el cursor no se puede devolver a su lugar. Por eso el correo
+    // NO se pasa a minusculas mientras se escribe: se normaliza al guardar.
     const normalized = el instanceof HTMLSelectElement
       ? el.value
       : normalizarConservandoCursor(el, (v) =>
-          lower.includes(name) || type === "email"
-            ? v.toLowerCase()
-            : upper.includes(name)
-            ? v.toUpperCase()
-            : v
+          upper.includes(name) ? v.toUpperCase() : v
         );
 
     setForm((prev) => ({ ...prev, [name]: normalized }));
@@ -695,8 +693,8 @@ export default function ClienteDetailPage() {
         es_contribuyente:    form.tipo_cliente === "persona" ? form.es_contribuyente : false,
         telefono:            form.telefono.trim()            || undefined,
         telefono_secundario: form.telefono_secundario.trim() || undefined,
-        email:               form.email.trim()               || undefined,
-        email_secundario:    form.email_secundario.trim()    || undefined,
+        email:               form.email.trim().toLowerCase()               || undefined,
+        email_secundario:    form.email_secundario.trim().toLowerCase()    || undefined,
         direccion:           form.direccion.trim()           || undefined,
         ciudad:              form.ciudad.trim().toUpperCase()  || undefined,
         pais:                form.pais.trim().toUpperCase()    || undefined,
