@@ -5,6 +5,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import MesSelector from "@/components/reportes/MesSelector";
+import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { getConciliacionReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { ConciliacionReporte, ConciliacionMovRow } from "@/lib/reportes/types";
@@ -166,7 +167,11 @@ export default function ConciliacionReportePage() {
             {movs.length === 0 ? (
               <p className="text-sm text-slate-400">No hay cobros por transferencia o tarjeta en el período.</p>
             ) : (
-              <div className="overflow-x-auto">
+              // La tabla no entra en pantalla y el scroll horizontal, con las
+              // barras ocultas de macOS, no se ve: parecia cortada.
+              // EdgeScrollArea dibuja el degrade en los bordes y arrastra sola
+              // al acercar el mouse, que es lo que ya usa Compras.
+              <EdgeScrollArea showHints>
                 <table className="w-full min-w-[1000px] text-left text-sm">
                   <thead>
                     <tr className="border-b text-slate-500">
@@ -231,7 +236,7 @@ export default function ConciliacionReportePage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </EdgeScrollArea>
             )}
           </div>
         </>

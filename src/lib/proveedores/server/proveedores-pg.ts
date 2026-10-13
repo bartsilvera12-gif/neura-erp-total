@@ -411,12 +411,13 @@ export async function borrarProveedorSiNoTieneCompras(
 }
 
 /**
- * Borra una categoría de proveedor y la desasigna de los que la tenían.
+ * Borra una categoría de proveedor, solo si no la está usando nadie.
  *
- * Se borra de verdad: una categoría no es un dato histórico, es una etiqueta.
- * Lo único que hay que limpiar son las relaciones, para no dejar filas
- * apuntando a algo que ya no existe. Devuelve a cuántos proveedores afectó,
- * para poder avisarlo antes de que lo noten.
+ * La primera versión la borraba y la desasignaba sola. QA pidió lo contrario, y
+ * tiene razón: desasignar en silencio cambia la ficha de proveedores que el
+ * usuario no está mirando. Si hay proveedores con esta categoría, no se borra y
+ * se devuelve cuántos son, para poder decirle a quién tiene que sacársela
+ * primero.
  */
 export async function borrarProveedorCategoria(
   schemaRaw: string,
@@ -426,18 +427,32 @@ export async function borrarProveedorCategoria(
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tCat = quoteSchemaTable(schema, "proveedor_categorias");
   const tRel = quoteSchemaTable(schema, "proveedor_categoria_rel");
+  const tProv = quoteSchemaTable(schema, "proveedores");
 
   const client = await pool().connect();
   try {
     await client.query("BEGIN");
 
-    const { rows } = await client.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM ${tRel} WHERE categoria_id = $1::uuid`,
+    const { rows } = await client.query<{ n: string; nombres: string | null }>(
+      `SELECT count(*)::text AS n,
+              string_agg(p.nombre, ', ' ORDER BY p.nombre) AS nombres
+         FROM ${tRel} r
+         JOIN ${tProv} p ON p.id = r.proveedor_id
+        WHERE r.categoria_id = $1::uuid`,
       [categoriaId]
     );
     const proveedores = Number(rows[0]?.n ?? 0);
 
-    await client.query(`DELETE FROM ${tRel} WHERE categoria_id = $1::uuid`, [categoriaId]);
+    if (proveedores > 0) {
+      await client.query("ROLLBACK");
+      const nombres = (rows[0]?.nombres ?? "").split(", ").filter(Boolean);
+      const lista = nombres.slice(0, 3).join(", ");
+      const resto = nombres.length > 3 ? ` y ${nombres.length - 3} más` : "";
+      throw new Error(
+        `No se puede borrar: la están usando ${proveedores} proveedor${proveedores === 1 ? "" : "es"} (${lista}${resto}). Sacásela primero desde la ficha de cada uno.`
+      );
+    }
+
     const del = await client.query(
       `DELETE FROM ${tCat} WHERE empresa_id = $1::uuid AND id = $2::uuid`,
       [empresaId, categoriaId]

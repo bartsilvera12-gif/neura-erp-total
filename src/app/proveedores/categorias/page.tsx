@@ -74,8 +74,8 @@ export default function ProveedorCategoriasPage() {
   }
 
   /**
-   * Borra la categoría. El servidor la quita además de los proveedores que la
-   * tenían asignada, y dice a cuántos afectó.
+   * Borra la categoría. Si algún proveedor la tiene asignada, el servidor la
+   * rechaza y dice quiénes son: no se desasigna sola.
    */
   async function eliminarCategoria(c: ProveedorCategoria) {
     if (!window.confirm(`¿Eliminar la categoría "${c.nombre}"?`)) return;

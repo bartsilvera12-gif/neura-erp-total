@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
-import { listCompras } from "@/lib/compras/server/compras-pg";
-import { buildXlsxBuffer, xlsxResponseHeaders, nowStamp } from "@/lib/excel/export";
+import { listCompras, type CompraRow } from "@/lib/compras/server/compras-pg";
+import { sheetFromRows, buildXlsxBufferSheets, xlsxResponseHeaders, nowStamp, type ExportColumn } from "@/lib/excel/export";
 
 /** La fecha de compra/factura es un día de calendario guardado como medianoche UTC;
  *  se formatea en UTC (DD/MM/YYYY) para que no retroceda un día por la zona horaria. */
@@ -21,7 +21,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const rows = await listCompras(schema, empresaId);
-    const buf = buildXlsxBuffer(rows, [
+
+    // Las anuladas iban mezcladas con las vigentes y solo se distinguian
+    // mirando fila por fila: en una planilla larga es invisible. Van en su
+    // propia hoja, y ademas cada fila dice si esta anulada y por que.
+    const vigentes = rows.filter((r) => !r.anulada_at);
+    const anuladas = rows.filter((r) => !!r.anulada_at);
+
+    const columnas: ExportColumn<CompraRow>[] = [
       { header: "NUMERO_CONTROL", value: (r) => r.numero_control, width: 16 },
       { header: "NUMERO_FACTURA", value: (r) => r.numero_factura ?? "", width: 18 },
       { header: "FECHA_FACTURA", value: (r) => fechaUtc(r.fecha_factura), width: 14 },
@@ -44,7 +51,17 @@ export async function GET(request: NextRequest) {
       { header: "NRO_TIMBRADO", value: (r) => r.nro_timbrado, width: 18 },
       { header: "ESTADO", value: (r) => r.estado, width: 10 },
       { header: "USUARIO", value: (r) => r.usuario_nombre ?? "", width: 24 },
-    ], { sheetName: "Compras" });
+      { header: "ANULADA", value: (r) => (r.anulada_at ? "SI" : "NO"), width: 9 },
+      { header: "FECHA_ANULACION", value: (r) => fechaUtc(r.anulada_at), width: 16 },
+      { header: "MOTIVO_ANULACION", value: (r) => r.anulada_motivo ?? "", width: 32 },
+    ];
+
+    const hojas = [sheetFromRows("Compras", vigentes, columnas)];
+    // La hoja de anuladas se agrega siempre, aunque este vacia: asi queda claro
+    // que se reviso y que no hay, en vez de parecer que falta.
+    hojas.push(sheetFromRows("Anuladas", anuladas, columnas));
+
+    const buf = buildXlsxBufferSheets(hojas);
 
     return new Response(new Uint8Array(buf), {
       status: 200,

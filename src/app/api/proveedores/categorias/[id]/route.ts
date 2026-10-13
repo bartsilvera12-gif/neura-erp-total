@@ -53,7 +53,12 @@ export async function PATCH(
   }
 }
 
-/** DELETE — borra la categoría y la saca de los proveedores que la tenían. */
+/**
+ * DELETE — borra la categoría.
+ *
+ * Si algún proveedor la tiene asignada no se borra: el motor devuelve el error
+ * con los nombres, para que el usuario sepa a quién sacársela primero.
+ */
 export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const tenant = await getTenantSupabaseFromAuth(request);
@@ -61,21 +66,13 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
     const schema = await fetchDataSchemaForEmpresaId(tenant.auth.empresa_id);
     const { id } = await ctx.params;
 
-    const { proveedores } = await borrarProveedorCategoria(schema, tenant.auth.empresa_id, id);
-
-    return NextResponse.json(
-      successResponse({
-        mensaje:
-          proveedores > 0
-            ? `Categoría eliminada. Se quitó de ${proveedores} proveedor${proveedores === 1 ? "" : "es"}.`
-            : "Categoría eliminada.",
-      })
-    );
+    await borrarProveedorCategoria(schema, tenant.auth.empresa_id, id);
+    return NextResponse.json(successResponse({ mensaje: "Categoría eliminada." }));
   } catch (err) {
     console.error("[api/proveedores/categorias/[id]] DELETE:", err instanceof Error ? err.message : err);
     return NextResponse.json(
       errorResponse(err instanceof Error ? err.message : "No se pudo eliminar la categoría."),
-      { status: 500 }
+      { status: 400 }
     );
   }
 }

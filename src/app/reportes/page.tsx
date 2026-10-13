@@ -47,8 +47,8 @@ export default function ReportesPage() {
             title="Ventas por vendedor"
             subtitle="Para la comisión de fin de mes"
             icon={Users}
-            description="Total vendido y comisión por vendedor del período. El porcentaje se edita ahí mismo."
-            href="/comisiones"
+            description="Cuánto vendió cada asesor en el período, con su ticket promedio y su participación."
+            href="/reportes/vendedores"
           />
         </li>
         <li>
