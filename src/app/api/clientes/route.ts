@@ -256,7 +256,9 @@ export async function POST(request: NextRequest) {
       nivel_precio,
       es_contribuyente,
       telefono,
+      telefono_secundario,
       email,
+      email_secundario,
       direccion,
       ciudad,
       pais,
@@ -329,7 +331,11 @@ export async function POST(request: NextRequest) {
                               : "minorista",
       es_contribuyente:     es_contribuyente === true,
       telefono:             telefono?.trim() || null,
+      // Los secundarios llegaban del formulario y la API los descartaba al
+      // desestructurar el body: el dato se perdia entre la pantalla y la base.
+      telefono_secundario:  telefono_secundario?.trim() || null,
       email:                email?.trim() || null,
+      email_secundario:     email_secundario?.trim() || null,
       direccion:            direccion?.trim() || null,
       ciudad:               ciudad?.trim() || null,
       pais:                 pais?.trim() || null,

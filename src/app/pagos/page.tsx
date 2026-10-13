@@ -1,344 +1,349 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Banknote, Loader2 } from "lucide-react";
-import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { generarYAbrirRecibo } from "@/lib/recibos/client";
-import { RegistrarCobroModalCxc } from "@/components/cobros/RegistrarCobroModalCxc";
+/**
+ * Pagos: la plata que SALE (proveedores).
+ *
+ * Antes esta ruta mostraba Cobranzas, y /cobros era un redirect hacia acá: el
+ * menú repetía el mismo panel en dos lugares. Ahora cada uno muestra lo suyo.
+ */
 
-type Cuenta = {
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Banknote, Loader2, RefreshCw } from "lucide-react";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import StatCard from "@/components/ui/StatCard";
+
+type Cuota = {
   id: string;
-  cliente_id: string;
-  cliente_nombre: string;
-  venta_id: string;
-  numero_venta: string | null;
-  fecha_emision: string | null;
-  fecha_vencimiento: string | null;
-  moneda: string;
-  total: number;
+  cuenta_por_pagar_id: string;
+  numero_cuota: number;
+  fecha_vencimiento: string;
+  monto: number;
   saldo: number;
   estado: string;
-  vencida: boolean;
-};
-type Cobro = {
-  id: string;
-  cliente_id: string | null;
-  cliente_nombre: string;
-  numero_venta: string | null;
-  fecha_pago: string | null;
-  monto: number;
-  metodo_pago: string;
-  referencia: string | null;
-  usuario_nombre: string | null;
+  proveedor_nombre: string | null;
+  compra_numero_control: string | null;
+  moneda: string;
 };
 
-const ESTADO_BADGE: Record<string, string> = {
-  pendiente: "bg-amber-100 text-amber-700",
-  parcial: "bg-sky-100 text-sky-700",
-  pagado: "bg-emerald-100 text-emerald-700",
-  vencido: "bg-red-100 text-red-700",
-  anulado: "bg-slate-100 text-slate-500",
-};
-const METODO_LABEL: Record<string, string> = {
-  efectivo: "Efectivo", transferencia: "Transferencia", tarjeta: "Tarjeta", otro: "Otro",
-};
+const METODOS = ["efectivo", "transferencia", "tarjeta", "cheque", "otro"] as const;
 
 function fmtGs(n: number, moneda = "PYG") {
   return (moneda === "USD" ? "USD " : "Gs. ") + Math.round(Number(n) || 0).toLocaleString("es-PY");
 }
-function ymd(iso: string | null): string {
-  if (!iso) return "";
-  return String(iso).slice(0, 10);
-}
 function fmtFecha(iso: string | null) {
-  const s = ymd(iso);
-  if (!s) return "—";
-  const [y, m, d] = s.split("-");
-  return d && m && y ? `${d}/${m}/${y}` : s;
+  if (!iso) return "—";
+  const [y, m, d] = String(iso).slice(0, 10).split("-");
+  return d && m && y ? `${d}/${m}/${y}` : String(iso);
+}
+function diasDe(iso: string): number {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const v = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
+  return Math.round((v.getTime() - hoy.getTime()) / 86400000);
 }
 
-const inputClass = "rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/40";
+const hoyISO = () => new Date().toISOString().slice(0, 10);
 
 export default function PagosPage() {
-  const [cuentas, setCuentas] = useState<Cuenta[]>([]);
-  const [cobros, setCobros] = useState<Cobro[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cuotas, setCuotas] = useState<Cuota[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"pendientes" | "cobrados">("pendientes");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<"pendientes" | "vencidas" | "todas">("pendientes");
+  const [pagando, setPagando] = useState<Cuota | null>(null);
 
-  const [cobrando, setCobrando] = useState<Cuenta | null>(null);
-  const [reciboBusy, setReciboBusy] = useState<string | null>(null);
-
-  const cargar = useCallback(async () => {
-    setLoading(true);
+  const traer = useCallback(async () => {
+    setCargando(true);
     setError(null);
     try {
-      const res = await fetchWithSupabaseSession("/api/cobros/cuentas", { cache: "no-store" });
-      const body = await res.json();
-      if (!res.ok || body?.success === false) {
-        setError(body?.error ?? "No se pudieron cargar las cobranzas.");
+      const r = await fetchWithSupabaseSession("/api/cuentas-por-pagar", { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setError(j?.error ?? "No se pudieron traer las cuotas.");
         return;
       }
-      setCuentas((body.data?.cuentas ?? []) as Cuenta[]);
-      setCobros((body.data?.cobros ?? []) as Cobro[]);
+      setCuotas((j.data?.cuotas ?? []) as Cuota[]);
     } catch {
-      setError("Error de red.");
+      setError("No se pudo conectar.");
     } finally {
-      setLoading(false);
+      setCargando(false);
     }
   }, []);
 
-  useEffect(() => {
-    void cargar();
-  }, [cargar]);
+  useEffect(() => { void traer(); }, [traer]);
 
-  const enRango = useCallback(
-    (fecha: string | null) => {
-      const f = ymd(fecha);
-      if (!f) return !desde && !hasta;
-      if (desde && f < desde) return false;
-      if (hasta && f > hasta) return false;
-      return true;
-    },
-    [desde, hasta]
-  );
-
-  // Pendientes = cuentas con saldo > 0 (incluye parciales). Filtro por emisión o vencimiento.
-  const pendientes = useMemo(
-    () =>
-      cuentas
-        .filter((c) => c.saldo > 0 && c.estado !== "anulado")
-        .filter((c) => (!desde && !hasta) ? true : (enRango(c.fecha_emision) || enRango(c.fecha_vencimiento))),
-    [cuentas, desde, hasta, enRango]
-  );
-  // Cobrados = historial de pagos. Filtro por fecha de pago.
-  const cobradosVista = useMemo(
-    () => cobros.filter((c) => (!desde && !hasta) ? true : enRango(c.fecha_pago)),
-    [cobros, desde, hasta, enRango]
-  );
-
-  const sumPend = useMemo(
-    () => pendientes.reduce((a, c) => ({ total: a.total + c.total, saldo: a.saldo + c.saldo }), { total: 0, saldo: 0 }),
+  const pendientes = useMemo(() => cuotas.filter((c) => c.saldo > 0), [cuotas]);
+  const vencidas = useMemo(() => pendientes.filter((c) => diasDe(c.fecha_vencimiento) < 0), [pendientes]);
+  const estaSemana = useMemo(
+    () => pendientes.filter((c) => { const d = diasDe(c.fecha_vencimiento); return d >= 0 && d <= 7; }),
     [pendientes]
   );
-  const sumCob = useMemo(() => cobradosVista.reduce((a, c) => a + c.monto, 0), [cobradosVista]);
 
-  function abrirCobro(c: Cuenta) {
-    setCobrando(c);
-  }
+  const vista = useMemo(() => {
+    const base = filtro === "todas" ? cuotas : filtro === "vencidas" ? vencidas : pendientes;
+    return [...base].sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
+  }, [cuotas, pendientes, vencidas, filtro]);
 
-  const hayFiltro = !!desde || !!hasta;
+  const totalDeuda = pendientes.reduce((a, c) => a + c.saldo, 0);
+  const totalVencido = vencidas.reduce((a, c) => a + c.saldo, 0);
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6">
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">✓ {toast}</div>
-      )}
-
+    <div className="space-y-6 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <Banknote className="h-7 w-7 text-[#4FAEB2]" />
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">Cobranzas</p>
-            <h1 className="text-2xl font-bold text-gray-800">Pagos</h1>
-            <p className="text-sm text-gray-500">Cuentas por cobrar de ventas a crédito y registro de cobros.</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">
+              Finanzas · Pagos
+            </p>
+            <h1 className="text-2xl font-bold text-gray-800">Pagos a proveedores</h1>
+            <p className="text-sm text-gray-500">
+              Lo que debés: cuotas de las compras a crédito y registro de pagos.
+            </p>
           </div>
         </div>
-        {/* Filtro de fechas */}
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 mb-1">Desde</label>
-            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 mb-1">Hasta</label>
-            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className={inputClass} />
-          </div>
-          {hayFiltro && (
-            <button type="button" onClick={() => { setDesde(""); setHasta(""); }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-              Limpiar
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Resumen */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-gray-400">Cuentas con saldo</div>
-          <div className="mt-1 text-2xl font-bold text-slate-800">{pendientes.length}</div>
-          <div className="text-[11px] text-slate-400">de {cuentas.length} en total</div>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-amber-600">Saldo pendiente</div>
-          <div className="mt-1 text-2xl font-bold text-amber-700">{fmtGs(sumPend.saldo)}</div>
-          <div className="text-[11px] text-amber-500">Total: {fmtGs(sumPend.total)}</div>
-        </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-emerald-600">Cobrado (filtros)</div>
-          <div className="mt-1 text-2xl font-bold text-emerald-700">{fmtGs(sumCob)}</div>
-          <div className="text-[11px] text-emerald-500">{cobradosVista.length} pagos</div>
-        </div>
-      </div>
-
-      {/* Pestañas: solo 2 */}
-      <div className="flex gap-2">
-        <button onClick={() => setTab("pendientes")} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${tab === "pendientes" ? "bg-[#4FAEB2] text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-          Pendientes <span className={`rounded-full px-2 py-0.5 text-xs ${tab === "pendientes" ? "bg-white/25" : "bg-slate-100"}`}>{pendientes.length}</span>
-        </button>
-        <button onClick={() => setTab("cobrados")} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${tab === "cobrados" ? "bg-[#4FAEB2] text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-          Cobrados <span className={`rounded-full px-2 py-0.5 text-xs ${tab === "cobrados" ? "bg-white/25" : "bg-slate-100"}`}>{cobradosVista.length}</span>
+        <button
+          onClick={() => void traer()}
+          disabled={cargando}
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {cargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Actualizar
         </button>
       </div>
 
-      {error && <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard
+          accent
+          label="Deuda total"
+          value={fmtGs(totalDeuda)}
+          hint={`${pendientes.length} cuota${pendientes.length === 1 ? "" : "s"} sin pagar`}
+        />
+        <StatCard
+          label="Vencido"
+          value={fmtGs(totalVencido)}
+          hint={vencidas.length === 0 ? "nada vencido" : `${vencidas.length} cuota${vencidas.length === 1 ? "" : "s"}`}
+        />
+        <StatCard
+          label="Vence esta semana"
+          value={String(estaSemana.length)}
+          hint="próximos 7 días"
+        />
+      </div>
 
-      {loading ? (
-        <div className="p-8 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>
-      ) : tab === "pendientes" ? (
-        <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {pendientes.length === 0 ? (
-            <div className="p-10 text-center text-sm text-gray-500">No hay cuentas pendientes {hayFiltro ? "en el rango seleccionado" : ""}.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-gray-500">
-                  <tr>
-                    <th className="py-3 px-4 font-medium">Cliente</th>
-                    <th className="py-3 px-4 font-medium">Venta</th>
-                    <th className="py-3 px-4 font-medium">Emisión</th>
-                    <th className="py-3 px-4 font-medium">Vencimiento</th>
-                    <th className="py-3 px-4 font-medium text-right">Total</th>
-                    <th className="py-3 px-4 font-medium text-right">Cobrado</th>
-                    <th className="py-3 px-4 font-medium text-right">Saldo</th>
-                    <th className="py-3 px-4 font-medium">Estado</th>
-                    <th className="py-3 px-4 font-medium text-right">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {pendientes.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50">
-                      <td className="py-3 px-4 text-gray-700"><Link href={`/clientes/${c.cliente_id}/estado-cuenta`} className="hover:text-[#4FAEB2] hover:underline">{c.cliente_nombre}</Link></td>
-                      <td className="py-3 px-4 font-mono font-medium text-gray-800">{c.numero_venta ?? "—"}</td>
-                      <td className="py-3 px-4 text-gray-600">{fmtFecha(c.fecha_emision)}</td>
-                      <td className={`py-3 px-4 ${c.vencida ? "font-semibold text-red-600" : "text-gray-600"}`}>{fmtFecha(c.fecha_vencimiento)}</td>
-                      <td className="py-3 px-4 text-right tabular-nums">{fmtGs(c.total, c.moneda)}</td>
-                      <td className="py-3 px-4 text-right tabular-nums text-emerald-700">{fmtGs(c.total - c.saldo, c.moneda)}</td>
-                      <td className="py-3 px-4 text-right tabular-nums font-semibold text-amber-600">{fmtGs(c.saldo, c.moneda)}</td>
-                      <td className="py-3 px-4">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO_BADGE[c.vencida && c.estado !== "pagado" ? "vencido" : c.estado] ?? ESTADO_BADGE.pendiente}`}>
-                          {c.vencida && c.estado !== "pagado" ? "Vencido" : c.estado.charAt(0).toUpperCase() + c.estado.slice(1)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button onClick={() => abrirCobro(c)} className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91]">Registrar pago</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50/90">
-                    <td colSpan={4} className="px-4 py-3">
-                      <p className="text-xs font-semibold text-slate-700">Suma de la vista</p>
-                      <p className="text-[11px] text-slate-500">{pendientes.length} registro{pendientes.length === 1 ? "" : "s"} · recalcula al cambiar fechas o pestaña</p>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total</span>
-                      <p className="text-sm font-bold tabular-nums text-slate-800">{fmtGs(sumPend.total)}</p>
-                    </td>
-                    <td className="px-4 py-3" />
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Saldo</span>
-                      <p className="text-sm font-bold tabular-nums text-amber-600">{fmtGs(sumPend.saldo)}</p>
-                    </td>
-                    <td colSpan={2} className="px-4 py-3" />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {cobradosVista.length === 0 ? (
-            <div className="p-10 text-center text-sm text-gray-500">No hay cobros {hayFiltro ? "en el rango seleccionado" : "registrados"}.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-gray-500">
-                  <tr>
-                    <th className="py-3 px-4 font-medium">Fecha</th>
-                    <th className="py-3 px-4 font-medium">Cliente</th>
-                    <th className="py-3 px-4 font-medium">Venta</th>
-                    <th className="py-3 px-4 font-medium">Método</th>
-                    <th className="py-3 px-4 font-medium">Referencia</th>
-                    <th className="py-3 px-4 font-medium">Registrado por</th>
-                    <th className="py-3 px-4 font-medium text-right">Monto</th>
-                    <th className="py-3 px-4 font-medium text-right">Recibo</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {cobradosVista.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-4 text-gray-600">{fmtFecha(c.fecha_pago)}</td>
-                      <td className="py-2.5 px-4 text-gray-700">
-                        {c.cliente_id ? <Link href={`/clientes/${c.cliente_id}/estado-cuenta`} className="hover:text-[#4FAEB2] hover:underline">{c.cliente_nombre}</Link> : c.cliente_nombre}
-                      </td>
-                      <td className="py-2.5 px-4 font-mono text-gray-700">{c.numero_venta ?? "—"}</td>
-                      <td className="py-2.5 px-4 text-gray-600">{METODO_LABEL[c.metodo_pago] ?? c.metodo_pago}</td>
-                      <td className="py-2.5 px-4 text-gray-500">{c.referencia ?? "—"}</td>
-                      <td className="py-2.5 px-4 text-gray-600">{c.usuario_nombre ?? "—"}</td>
-                      <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-emerald-700">{fmtGs(c.monto)}</td>
-                      <td className="py-2.5 px-4 text-right">
-                        <button
-                          disabled={reciboBusy === c.id}
-                          onClick={async () => {
-                            if (reciboBusy) return;
-                            setReciboBusy(c.id);
-                            try {
-                              const r = await generarYAbrirRecibo({ origen: "cobro_cxc", cobro_cliente_id: c.id });
-                              if (r.ok) { setToast("Recibo generado"); setTimeout(() => setToast(null), 2500); }
-                              else { setError(r.error ?? "No se pudo generar el recibo."); }
-                            } finally {
-                              setReciboBusy(null);
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          {reciboBusy === c.id ? <><Loader2 className="h-3 w-3 animate-spin" /> Abriendo…</> : "Recibo"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50/90">
-                    <td colSpan={5} className="px-4 py-3">
-                      <p className="text-xs font-semibold text-slate-700">Total cobrado en la vista</p>
-                      <p className="text-[11px] text-slate-500">{cobradosVista.length} registro{cobradosVista.length === 1 ? "" : "s"} · recalcula al cambiar fechas</p>
-                    </td>
-                    <td className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-500">Cobrado</td>
-                    <td className="px-4 py-3 text-right"><p className="text-sm font-bold tabular-nums text-emerald-700">{fmtGs(sumCob)}</p></td>
-                    <td className="px-4 py-3" />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </div>
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
       )}
 
-      {/* Modal registrar pago (componente compartido con campos de Transferencia/Tarjeta) */}
-      <RegistrarCobroModalCxc
-        open={!!cobrando}
-        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, moneda: cobrando.moneda, cliente_nombre: cobrando.cliente_nombre } : null}
-        onClose={() => setCobrando(null)}
-        onExito={async () => { setToast("Pago registrado"); setTimeout(() => setToast(null), 2800); await cargar(); }}
-      />
+      <div className="rounded-2xl border border-[#4FAEB2]/30 bg-white p-6 shadow-sm ring-1 ring-[#4FAEB2]/10">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {([["pendientes", "Sin pagar"], ["vencidas", "Vencidas"], ["todas", "Todas"]] as const).map(
+            ([id, et]) => (
+              <button
+                key={id}
+                onClick={() => setFiltro(id)}
+                aria-pressed={filtro === id}
+                className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
+                  filtro === id
+                    ? "border-[#4FAEB2] bg-[#4FAEB2] text-white"
+                    : "border-slate-200 text-slate-600 hover:border-[#4FAEB2]"
+                }`}
+              >
+                {et}
+              </button>
+            )
+          )}
+        </div>
+
+        {cargando && cuotas.length === 0 ? (
+          <p className="py-16 text-center text-slate-400">
+            <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
+            Cargando cuotas…
+          </p>
+        ) : vista.length === 0 ? (
+          <p className="py-16 text-center text-sm text-slate-400">
+            {cuotas.length === 0
+              ? "No hay compras a crédito cargadas todavía."
+              : "No hay cuotas en este filtro."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2">Proveedor</th>
+                  <th className="px-3 py-2">Compra</th>
+                  <th className="px-3 py-2">Cuota</th>
+                  <th className="px-3 py-2">Vence</th>
+                  <th className="px-3 py-2 text-right">Monto</th>
+                  <th className="px-3 py-2 text-right">Saldo</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {vista.map((c) => {
+                  const dias = diasDe(c.fecha_vencimiento);
+                  const vencida = c.saldo > 0 && dias < 0;
+                  return (
+                    <tr key={c.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-2.5 font-medium text-slate-800">
+                        {c.proveedor_nombre ?? "—"}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[12px] text-slate-500">
+                        {c.compra_numero_control ?? "—"}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-slate-600">#{c.numero_cuota}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={vencida ? "font-semibold text-rose-600" : "text-slate-600"}>
+                          {fmtFecha(c.fecha_vencimiento)}
+                        </span>
+                        {vencida && (
+                          <span className="ml-1.5 text-[11px] font-semibold text-rose-600">
+                            {Math.abs(dias)} días
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                        {fmtGs(c.monto, c.moneda)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">
+                        {fmtGs(c.saldo, c.moneda)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {c.saldo > 0 ? (
+                          <button
+                            onClick={() => setPagando(c)}
+                            className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-[#3F8E91]"
+                          >
+                            Pagar
+                          </button>
+                        ) : (
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-semibold text-emerald-700">
+                            Pagada
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {pagando && (
+        <ModalPago
+          cuota={pagando}
+          cerrar={() => setPagando(null)}
+          listo={() => { setPagando(null); void traer(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ModalPago({
+  cuota, cerrar, listo,
+}: { cuota: Cuota; cerrar: () => void; listo: () => void }) {
+  const [monto, setMonto] = useState(String(Math.round(cuota.saldo)));
+  const [fecha, setFecha] = useState(hoyISO());
+  const [metodo, setMetodo] = useState<string>("transferencia");
+  const [referencia, setReferencia] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function guardar() {
+    const n = Number(monto);
+    if (!Number.isFinite(n) || n <= 0) return setError("El monto debe ser mayor a 0.");
+    if (n > cuota.saldo + 0.01) return setError(`No puede superar el saldo (${fmtGs(cuota.saldo, cuota.moneda)}).`);
+    setGuardando(true);
+    setError(null);
+    try {
+      const r = await fetchWithSupabaseSession("/api/cuentas-por-pagar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cuota_id: cuota.id,
+          monto: n,
+          fecha_pago: fecha,
+          metodo_pago: metodo,
+          referencia: referencia.trim() || null,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setError(j?.error ?? "No se pudo registrar el pago.");
+        return;
+      }
+      listo();
+    } catch {
+      setError("No se pudo conectar.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const campo = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-[#4FAEB2] focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/20";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-bold text-slate-900">Registrar pago</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          {cuota.proveedor_nombre ?? "Proveedor"} · cuota #{cuota.numero_cuota} ·
+          saldo {fmtGs(cuota.saldo, cuota.moneda)}
+        </p>
+
+        <div className="mt-5 grid gap-3">
+          <label className="text-[13px] font-semibold text-slate-700">
+            Monto
+            <input
+              type="number" min="0" value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+              className={`mt-1 ${campo}`}
+            />
+          </label>
+          <label className="text-[13px] font-semibold text-slate-700">
+            Fecha
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={`mt-1 ${campo}`} />
+          </label>
+          <label className="text-[13px] font-semibold text-slate-700">
+            Método
+            <select value={metodo} onChange={(e) => setMetodo(e.target.value)} className={`mt-1 ${campo}`}>
+              {METODOS.map((m) => (
+                <option key={m} value={m}>{m[0].toUpperCase() + m.slice(1)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[13px] font-semibold text-slate-700">
+            Referencia <span className="font-normal text-slate-400">(opcional)</span>
+            <input
+              value={referencia} onChange={(e) => setReferencia(e.target.value)}
+              placeholder="N.º de transferencia, cheque…"
+              className={`mt-1 ${campo}`}
+            />
+          </label>
+        </div>
+
+        {error && (
+          <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={cerrar} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium">
+            Cancelar
+          </button>
+          <button
+            onClick={() => void guardar()}
+            disabled={guardando}
+            className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {guardando ? "Guardando…" : "Registrar pago"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

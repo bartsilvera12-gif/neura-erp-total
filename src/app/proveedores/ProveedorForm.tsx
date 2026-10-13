@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type {
   CondicionPagoProveedor,
   EstadoProveedor,
@@ -54,11 +56,14 @@ export default function ProveedorForm({
   values,
   onChange,
   categorias,
+  onCategoriaCreada,
   disabled,
 }: {
   values: ProveedorFormValues;
   onChange: (next: ProveedorFormValues) => void;
   categorias: ProveedorCategoria[];
+  /** Se llama al crear una categoría desde acá, para refrescar la lista. */
+  onCategoriaCreada?: (c: ProveedorCategoria) => void;
   disabled?: boolean;
 }) {
   function patch<K extends keyof ProveedorFormValues>(key: K, v: ProveedorFormValues[K]) {
@@ -70,6 +75,38 @@ export default function ProveedorForm({
     if (set.has(id)) set.delete(id);
     else set.add(id);
     patch("categoria_ids", [...set]);
+  }
+
+  const [catNueva, setCatNueva] = useState("");
+  const [creandoCat, setCreandoCat] = useState(false);
+  const [errorCat, setErrorCat] = useState<string | null>(null);
+
+  /** Crea la categoría y la deja ya marcada en este proveedor. */
+  async function crearCategoria() {
+    const nombre = catNueva.trim();
+    if (!nombre) return;
+    setCreandoCat(true);
+    setErrorCat(null);
+    try {
+      const r = await fetchWithSupabaseSession("/api/proveedores/categorias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setErrorCat(j?.error ?? "No se pudo crear la categoría.");
+        return;
+      }
+      const cat = j.data?.categoria as ProveedorCategoria;
+      onCategoriaCreada?.(cat);
+      patch("categoria_ids", [...values.categoria_ids, cat.id]);
+      setCatNueva("");
+    } catch {
+      setErrorCat("No se pudo conectar.");
+    } finally {
+      setCreandoCat(false);
+    }
   }
 
   return (
@@ -238,12 +275,8 @@ export default function ProveedorForm({
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Categorías</p>
         {categorias.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No hay categorías aún.{" "}
-            <a href="/proveedores/categorias" className="text-sky-600 underline">
-              Crear en gestión de categorías
-            </a>
-            .
+          <p className="mb-2 text-sm text-slate-500">
+            Todavía no hay categorías. Creá la primera acá abajo.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -267,6 +300,34 @@ export default function ProveedorForm({
             })}
           </div>
         )}
+
+        {/* Alta en linea: antes habia que salir a /proveedores/categorias,
+            cargarla alla y volver a empezar el proveedor. */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={catNueva}
+            onChange={(e) => setCatNueva(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void crearCategoria();
+              }
+            }}
+            disabled={disabled || creandoCat}
+            placeholder="Nueva categoría (ej: Electrodomésticos)"
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-sky-400 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => void crearCategoria()}
+            disabled={disabled || creandoCat || !catNueva.trim()}
+            className="rounded-lg border border-sky-300 px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-40"
+          >
+            {creandoCat ? "Creando…" : "Agregar"}
+          </button>
+        </div>
+        {errorCat && <p className="mt-1.5 text-sm text-rose-600">{errorCat}</p>}
       </div>
     </div>
   );

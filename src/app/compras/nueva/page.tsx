@@ -13,6 +13,7 @@ import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { formatearNumeroDocumento } from "@/lib/documentos/numero-documento";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -587,13 +588,15 @@ export default function NuevaCompraPage() {
               <div>
                 <label className={labelClass}>N° de timbrado {esProvisoriaMode ? <span className="text-gray-400 font-normal">(opcional)</span> : <span className="text-red-500">*</span>}</label>
                 <input type="text" name="nro_timbrado" value={cab.nro_timbrado}
-                  onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: e.target.value }))}
+                  onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: formatearNumeroDocumento(e.target.value) }))}
+                  inputMode="numeric"
                   placeholder="Ej: 001-001-0000001" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>N° de factura {esProvisoriaMode ? <span className="text-gray-400 font-normal">(opcional)</span> : <span className="text-red-500">*</span>}</label>
                 <input type="text" name="numero_factura" value={cab.numero_factura}
-                  onChange={(e) => setCab((p) => ({ ...p, numero_factura: e.target.value }))}
+                  onChange={(e) => setCab((p) => ({ ...p, numero_factura: formatearNumeroDocumento(e.target.value) }))}
+                  inputMode="numeric"
                   placeholder="Ej: 001-001-0000123" className={inputClass} />
               </div>
               <div>

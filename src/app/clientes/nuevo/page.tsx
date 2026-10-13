@@ -308,7 +308,11 @@ function NuevoClienteForm() {
       documento: form.documento.trim() || undefined,
       es_contribuyente: form.tipo_cliente === "persona" ? form.es_contribuyente : false,
       telefono: form.telefono.trim() || undefined,
+      // Los secundarios tenian campo en el formulario pero no viajaban en el
+      // alta: lo que se cargaba ahi se perdia sin aviso.
+      telefono_secundario: form.telefono_secundario.trim() || undefined,
       email: form.email.trim() || undefined,
+      email_secundario: form.email_secundario.trim() || undefined,
       direccion: form.direccion.trim() || undefined,
       ciudad: form.ciudad.trim().toUpperCase() || undefined,
       pais: form.pais.trim().toUpperCase() || undefined,

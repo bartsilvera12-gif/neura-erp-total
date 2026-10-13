@@ -8,6 +8,7 @@ import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { Proveedor } from "@/lib/proveedores/types";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 export default function ProveedoresPage() {
   const { isAdmin } = useIsAdmin();
@@ -15,6 +16,33 @@ export default function ProveedoresPage() {
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [borrando, setBorrando] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  /**
+   * Eliminar un proveedor. El servidor decide: si tiene compras cargadas no se
+   * borra, se marca inactivo, y avisa por qué — el historial de costos no se
+   * puede quedar sin dueño.
+   */
+  async function eliminar(p: Proveedor) {
+    if (!window.confirm(`¿Eliminar a ${p.nombre}?`)) return;
+    setBorrando(p.id);
+    setAviso(null);
+    try {
+      const r = await fetchWithSupabaseSession(`/api/proveedores/${p.id}`, { method: "DELETE" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setAviso(j?.error ?? "No se pudo eliminar.");
+        return;
+      }
+      setAviso(j.data?.mensaje ?? "Proveedor eliminado.");
+      setRefreshKey((k) => k + 1);
+    } catch {
+      setAviso("No se pudo conectar.");
+    } finally {
+      setBorrando(null);
+    }
+  }
 
   useEffect(() => {
     let cancel = false;
@@ -72,6 +100,15 @@ export default function ProveedoresPage() {
           </Link>
         </div>
       </div>
+
+      {aviso && (
+        <div className="mb-4 flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <span>{aviso}</span>
+          <button onClick={() => setAviso(null)} className="shrink-0 text-slate-400 hover:text-slate-600">
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -154,12 +191,22 @@ export default function ProveedoresPage() {
                       </span>
                     </td>
                     <td className="py-3">
-                      <Link
-                        href={`/proveedores/${p.id}/editar`}
-                        className="text-sm font-medium text-sky-600 hover:underline"
-                      >
-                        Editar
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        <Link
+                          href={`/proveedores/${p.id}/editar`}
+                          className="text-sm font-medium text-sky-600 hover:underline"
+                        >
+                          Editar
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void eliminar(p)}
+                          disabled={borrando === p.id}
+                          className="text-sm font-medium text-rose-600 hover:underline disabled:opacity-40"
+                        >
+                          {borrando === p.id ? "Eliminando…" : "Eliminar"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

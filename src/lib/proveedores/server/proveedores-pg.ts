@@ -370,3 +370,42 @@ export async function replaceRelacionesProveedor(
   }
 }
 
+
+/**
+ * Borra el proveedor solo si no tiene compras; si las tiene, lo deja inactivo.
+ *
+ * Las compras guardan `proveedor_id`: borrarlo de verdad dejaría el historial
+ * de costos sin dueño, y de ahí salen los reportes de compras y el costo
+ * promedio. Devuelve cuántas compras encontró para poder avisarlo.
+ */
+export async function borrarProveedorSiNoTieneCompras(
+  schemaRaw: string,
+  empresaId: string,
+  proveedorId: string
+): Promise<{ borrado: boolean; compras: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tProv = quoteSchemaTable(schema, "proveedores");
+  const tCom = quoteSchemaTable(schema, "compras");
+  const p = pool();
+
+  const { rows } = await p.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM ${tCom} WHERE empresa_id = $1::uuid AND proveedor_id = $2::uuid`,
+    [empresaId, proveedorId]
+  );
+  const compras = Number(rows[0]?.n ?? 0);
+
+  if (compras > 0) {
+    await p.query(
+      `UPDATE ${tProv} SET estado = 'inactivo', updated_at = now()
+        WHERE empresa_id = $1::uuid AND id = $2::uuid`,
+      [empresaId, proveedorId]
+    );
+    return { borrado: false, compras };
+  }
+
+  await p.query(`DELETE FROM ${tProv} WHERE empresa_id = $1::uuid AND id = $2::uuid`, [
+    empresaId,
+    proveedorId,
+  ]);
+  return { borrado: true, compras: 0 };
+}
