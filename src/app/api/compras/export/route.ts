@@ -56,10 +56,11 @@ export async function GET(request: NextRequest) {
       { header: "MOTIVO_ANULACION", value: (r) => r.anulada_motivo ?? "", width: 32 },
     ];
 
-    const hojas = [sheetFromRows("Compras", vigentes, columnas)];
-    // La hoja de anuladas se agrega siempre, aunque este vacia: asi queda claro
-    // que se reviso y que no hay, en vez de parecer que falta.
-    hojas.push(sheetFromRows("Anuladas", anuladas, columnas));
+    const hojas = [sheetFromRows("Compras vigentes", vigentes, columnas)];
+    // El nombre de la hoja lleva el conteo: con "Anuladas" a secas habia que
+    // acordarse de mirar la pestania de abajo para saber si habia alguna.
+    // Se agrega siempre, aunque este vacia, asi queda claro que se reviso.
+    hojas.push(sheetFromRows(`Anuladas (${anuladas.length})`, anuladas, columnas));
 
     const buf = buildXlsxBufferSheets(hojas);
 

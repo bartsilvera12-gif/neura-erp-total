@@ -167,21 +167,22 @@ export default function ConciliacionReportePage() {
             {movs.length === 0 ? (
               <p className="text-sm text-slate-400">No hay cobros por transferencia o tarjeta en el período.</p>
             ) : (
-              // La tabla no entra en pantalla y el scroll horizontal, con las
-              // barras ocultas de macOS, no se ve: parecia cortada.
-              // EdgeScrollArea dibuja el degrade en los bordes y arrastra sola
-              // al acercar el mouse, que es lo que ya usa Compras.
+              // Tenia 9 columnas y 1000px de ancho minimo: no entraba en
+              // pantalla y, con las barras de scroll ocultas de macOS, nada
+              // insinuaba que se podia correr, asi que se veia cortada.
+              //
+              // Se agrupa lo que se lee junto (fecha con nro de venta, banco con
+              // titular, monto con nro de comprobante): 6 columnas y 720px, que
+              // si entran. EdgeScrollArea queda para pantallas chicas, con el
+              // degrade en los bordes como pista.
               <EdgeScrollArea showHints>
-                <table className="w-full min-w-[1000px] text-left text-sm">
+                <table className="w-full min-w-[720px] text-left text-sm">
                   <thead>
                     <tr className="border-b text-slate-500">
-                      <th className="py-2.5 pr-4 font-medium">Fecha</th>
-                      <th className="py-2.5 pr-4 font-medium">N° Venta</th>
+                      <th className="py-2.5 pr-4 font-medium">Fecha y venta</th>
                       <th className="py-2.5 pr-4 font-medium">Método</th>
-                      <th className="py-2.5 pr-4 font-medium">Banco / entidad</th>
-                      <th className="py-2.5 pr-4 font-medium">Titular</th>
+                      <th className="py-2.5 pr-4 font-medium">Banco y titular</th>
                       <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
-                      <th className="py-2.5 pr-4 font-medium">N° Comprobante</th>
                       <th className="py-2.5 pr-4 font-medium">Estado</th>
                       <th className="py-2.5 font-medium text-right">Acción</th>
                     </tr>
@@ -189,18 +190,26 @@ export default function ConciliacionReportePage() {
                   <tbody>
                     {movs.map((m) => (
                       <tr key={m.id} className="border-b border-slate-100 last:border-0">
-                        <td className="py-3 pr-4 text-slate-600 text-xs tabular-nums">{formatFecha(m.fecha)}</td>
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-500">{m.numero ?? "—"}</td>
+                        <td className="py-3 pr-4 text-slate-600">
+                          <span className="block text-xs tabular-nums">{formatFecha(m.fecha)}</span>
+                          <span className="block font-mono text-[11px] text-slate-400">{m.numero ?? "—"}</span>
+                        </td>
                         <td className="py-3 pr-4">
                           <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">{metodoLabel(m.metodo_pago)}</span>
                         </td>
                         <td className="py-3 pr-4 text-slate-700">
-                          {m.entidad_codigo ? <span className="font-mono text-xs text-slate-400">{m.entidad_codigo} · </span> : null}
-                          {m.entidad ?? "—"}
+                          <span className="block">
+                            {m.entidad_codigo ? <span className="font-mono text-xs text-slate-400">{m.entidad_codigo} · </span> : null}
+                            {m.entidad ?? "—"}
+                          </span>
+                          {m.titular && <span className="block text-xs text-slate-500">{m.titular}</span>}
                         </td>
-                        <td className="py-3 pr-4 text-slate-600">{m.titular ?? "—"}</td>
-                        <td className="py-3 pr-4 text-right tabular-nums font-semibold text-slate-800">{formatGs(m.monto)}</td>
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-500">{m.referencia ?? "—"}</td>
+                        <td className="py-3 pr-4 text-right">
+                          <span className="block tabular-nums font-semibold text-slate-800">{formatGs(m.monto)}</span>
+                          {m.referencia && (
+                            <span className="block font-mono text-[11px] text-slate-400">N° {m.referencia}</span>
+                          )}
+                        </td>
                         <td className="py-3 pr-4">
                           <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO_BADGE[m.estado]}`}>{ESTADO_LBL[m.estado]}</span>
                         </td>
