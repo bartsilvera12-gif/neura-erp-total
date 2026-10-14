@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCompras } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { formatearNumeroDocumento } from "@/lib/documentos/numero-documento";
+import { formatearNumeroDocumento, formatearTimbrado } from "@/lib/documentos/numero-documento";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -598,7 +598,7 @@ function EditarCompraModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">Nº de timbrado</label>
-            <input value={form.nro_timbrado} onChange={(e) => setForm({ ...form, nro_timbrado: formatearNumeroDocumento(e.target.value) })} inputMode="numeric" className={input} />
+            <input value={form.nro_timbrado} onChange={(e) => setForm({ ...form, nro_timbrado: formatearTimbrado(e.target.value) })} inputMode="numeric" className={input} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">Observación</label>

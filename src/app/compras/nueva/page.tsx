@@ -14,7 +14,7 @@ import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { formatearNumeroDocumento, numeroDocumentoCompleto } from "@/lib/documentos/numero-documento";
+import { formatearNumeroDocumento, formatearTimbrado } from "@/lib/documentos/numero-documento";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -326,12 +326,9 @@ export default function NuevaCompraPage() {
     // En provisoria el timbrado y la factura se completan al convertir en definitiva.
     if (!esProvisoriaMode && !cab.nro_timbrado.trim()) return setErrorSubmit("Ingresá el N° de timbrado.");
     if (!esProvisoriaMode && !cab.numero_factura.trim()) return setErrorSubmit("Ingresá el N° de factura.");
-    // Los numeros fiscales paraguayos son 3-3-7. El formateador ya impide
-    // pasarse de largo; esto impide guardarlo a medias.
-    if (cab.nro_timbrado.trim() && !numeroDocumentoCompleto(cab.nro_timbrado))
-      return setErrorSubmit("El N° de timbrado va completo: 001-001-0000001 (13 dígitos).");
-    if (cab.numero_factura.trim() && !numeroDocumentoCompleto(cab.numero_factura))
-      return setErrorSubmit("El N° de factura va completo: 001-001-0000001 (13 dígitos).");
+    // NO se exige que el numero este completo: hay compras ya cargadas con
+    // numeros de otro largo, y bloquear el guardado impedia editarlas. El
+    // formateo mientras se escribe ya impide cargar cualquier cosa nueva.
     if (lineas.length === 0) return setErrorSubmit("Agregá al menos un producto a la compra.");
     if (cab.moneda === "USD" && tipoCambioNum <= 0)
       return setErrorSubmit("Cargá el tipo de cambio (USD → Gs.).");
@@ -604,9 +601,9 @@ export default function NuevaCompraPage() {
               <div>
                 <label className={labelClass}>N° de timbrado {esProvisoriaMode ? <span className="text-gray-400 font-normal">(opcional)</span> : <span className="text-red-500">*</span>}</label>
                 <input type="text" name="nro_timbrado" value={cab.nro_timbrado}
-                  onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: formatearNumeroDocumento(e.target.value) }))}
+                  onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: formatearTimbrado(e.target.value) }))}
                   inputMode="numeric"
-                  placeholder="Ej: 001-001-0000001" className={inputClass} />
+                  placeholder="Ej: 12345678" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>N° de factura {esProvisoriaMode ? <span className="text-gray-400 font-normal">(opcional)</span> : <span className="text-red-500">*</span>}</label>

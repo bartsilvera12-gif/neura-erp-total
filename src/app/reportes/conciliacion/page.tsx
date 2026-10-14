@@ -5,7 +5,6 @@ import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import MesSelector from "@/components/reportes/MesSelector";
-import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { getConciliacionReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { ConciliacionReporte, ConciliacionMovRow } from "@/lib/reportes/types";
@@ -167,85 +166,79 @@ export default function ConciliacionReportePage() {
             {movs.length === 0 ? (
               <p className="text-sm text-slate-400">No hay cobros por transferencia o tarjeta en el período.</p>
             ) : (
-              // Tenia 9 columnas y 1000px de ancho minimo: no entraba en
-              // pantalla y, con las barras de scroll ocultas de macOS, nada
-              // insinuaba que se podia correr, asi que se veia cortada.
-              //
-              // Se agrupa lo que se lee junto (fecha con nro de venta, banco con
-              // titular, monto con nro de comprobante): 6 columnas y 720px, que
-              // si entran. EdgeScrollArea queda para pantallas chicas, con el
-              // degrade en los bordes como pista.
-              <EdgeScrollArea showHints>
-                <table className="w-full min-w-[720px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b text-slate-500">
-                      <th className="py-2.5 pr-4 font-medium">Fecha y venta</th>
-                      <th className="py-2.5 pr-4 font-medium">Método</th>
-                      <th className="py-2.5 pr-4 font-medium">Banco y titular</th>
-                      <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
-                      <th className="py-2.5 pr-4 font-medium">Estado</th>
-                      <th className="py-2.5 font-medium text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {movs.map((m) => (
-                      <tr key={m.id} className="border-b border-slate-100 last:border-0">
-                        <td className="py-3 pr-4 text-slate-600">
-                          <span className="block text-xs tabular-nums">{formatFecha(m.fecha)}</span>
-                          <span className="block font-mono text-[11px] text-slate-400">{m.numero ?? "—"}</span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">{metodoLabel(m.metodo_pago)}</span>
-                        </td>
-                        <td className="py-3 pr-4 text-slate-700">
-                          <span className="block">
-                            {m.entidad_codigo ? <span className="font-mono text-xs text-slate-400">{m.entidad_codigo} · </span> : null}
-                            {m.entidad ?? "—"}
-                          </span>
-                          {m.titular && <span className="block text-xs text-slate-500">{m.titular}</span>}
-                        </td>
-                        <td className="py-3 pr-4 text-right">
-                          <span className="block tabular-nums font-semibold text-slate-800">{formatGs(m.monto)}</span>
-                          {m.referencia && (
-                            <span className="block font-mono text-[11px] text-slate-400">N° {m.referencia}</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4">
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO_BADGE[m.estado]}`}>{ESTADO_LBL[m.estado]}</span>
-                        </td>
-                        <td className="py-3 text-right">
-                          {m.estado === "pendiente" ? (
-                            <div className="inline-flex gap-2">
-                              <button
-                                disabled={busy === m.id}
-                                onClick={() => setEstado(m, "aprobado")}
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                              >
-                                Aprobar
-                              </button>
-                              <button
-                                disabled={busy === m.id}
-                                onClick={() => setEstado(m, "rechazado")}
-                                className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
-                              >
-                                Rechazar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              disabled={busy === m.id}
-                              onClick={() => setEstado(m, "pendiente")}
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              Revertir
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </EdgeScrollArea>
+              /* Esto era una tabla de 9 columnas con 1000px de ancho minimo: no
+                 entraba, la columna Accion quedaba cortada, y los intentos de
+                 arreglarlo con scroll horizontal solo agregaron un degrade que
+                 parecia un defecto. Una tabla obliga a que todas las filas
+                 compartan anchos; una lista no. Cada movimiento es una fila
+                 flexible que se reacomoda sola y nunca se corta. */
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {movs.map((m) => (
+                  <li
+                    key={m.id}
+                    className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-slate-200 px-4 py-3"
+                  >
+                    <div className="min-w-[120px]">
+                      <p className="text-xs tabular-nums text-slate-600">{formatFecha(m.fecha)}</p>
+                      <p className="font-mono text-[11px] text-slate-400">{m.numero ?? "—"}</p>
+                    </div>
+
+                    <span className="inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                      {metodoLabel(m.metodo_pago)}
+                    </span>
+
+                    <div className="min-w-[150px] flex-1">
+                      <p className="text-sm text-slate-700">
+                        {m.entidad_codigo ? (
+                          <span className="font-mono text-xs text-slate-400">{m.entidad_codigo} · </span>
+                        ) : null}
+                        {m.entidad ?? "—"}
+                      </p>
+                      {m.titular && <p className="text-xs text-slate-500">{m.titular}</p>}
+                    </div>
+
+                    <div className="text-right">
+                      <p className="tabular-nums text-sm font-semibold text-slate-800">{formatGs(m.monto)}</p>
+                      {m.referencia && (
+                        <p className="font-mono text-[11px] text-slate-400">N° {m.referencia}</p>
+                      )}
+                    </div>
+
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO_BADGE[m.estado]}`}>
+                      {ESTADO_LBL[m.estado]}
+                    </span>
+
+                    <div className="ml-auto flex shrink-0 gap-2">
+                      {m.estado === "pendiente" ? (
+                        <>
+                          <button
+                            disabled={busy === m.id}
+                            onClick={() => setEstado(m, "aprobado")}
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            disabled={busy === m.id}
+                            onClick={() => setEstado(m, "rechazado")}
+                            className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                          >
+                            Rechazar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          disabled={busy === m.id}
+                          onClick={() => setEstado(m, "pendiente")}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          Revertir
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </>

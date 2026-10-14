@@ -34,3 +34,17 @@ export function soloDigitos(valor: string): string {
 export function numeroDocumentoCompleto(valor: string): boolean {
   return soloDigitos(valor).length === DIGITOS;
 }
+
+/**
+ * Número de timbrado.
+ *
+ * El timbrado que emite la SET es un número de 8 dígitos (12345678), NO el
+ * 001-001-0000001 de la factura. El campo del ERP sugería el formato de la
+ * factura en su placeholder, y por eso se le había aplicado el mismo
+ * formateo: eso rompía timbrados reales, convirtiéndolos en "123-456-78".
+ *
+ * Acá solo se limpia: dígitos, hasta 8.
+ */
+export function formatearTimbrado(valor: string): string {
+  return String(valor ?? "").replace(/\D/g, "").slice(0, 8);
+}
