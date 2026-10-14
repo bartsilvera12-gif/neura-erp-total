@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, Search, Trash2, X } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { saveCompraMulti, uploadComprobante, type CompraItemPayload } from "@/lib/compras/storage";
 import { getProveedores, proveedorExiste, createProveedor } from "@/lib/proveedores/storage";
@@ -13,7 +14,7 @@ import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { formatearNumeroDocumento } from "@/lib/documentos/numero-documento";
+import { formatearNumeroDocumento, numeroDocumentoCompleto } from "@/lib/documentos/numero-documento";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -325,6 +326,12 @@ export default function NuevaCompraPage() {
     // En provisoria el timbrado y la factura se completan al convertir en definitiva.
     if (!esProvisoriaMode && !cab.nro_timbrado.trim()) return setErrorSubmit("Ingresá el N° de timbrado.");
     if (!esProvisoriaMode && !cab.numero_factura.trim()) return setErrorSubmit("Ingresá el N° de factura.");
+    // Los numeros fiscales paraguayos son 3-3-7. El formateador ya impide
+    // pasarse de largo; esto impide guardarlo a medias.
+    if (cab.nro_timbrado.trim() && !numeroDocumentoCompleto(cab.nro_timbrado))
+      return setErrorSubmit("El N° de timbrado va completo: 001-001-0000001 (13 dígitos).");
+    if (cab.numero_factura.trim() && !numeroDocumentoCompleto(cab.numero_factura))
+      return setErrorSubmit("El N° de factura va completo: 001-001-0000001 (13 dígitos).");
     if (lineas.length === 0) return setErrorSubmit("Agregá al menos un producto a la compra.");
     if (cab.moneda === "USD" && tipoCambioNum <= 0)
       return setErrorSubmit("Cargá el tipo de cambio (USD → Gs.).");
@@ -549,6 +556,15 @@ export default function NuevaCompraPage() {
   return (
     <div className="space-y-8">
       <div>
+        {/* Se entra aca desde "Editar productos" del listado y no habia forma
+            de volver: habia que salir por el menu y buscar Compras de nuevo. */}
+        <Link
+          href="/compras"
+          className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-[#3F8E91] hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver a Compras
+        </Link>
         <h1 className="text-3xl font-bold text-gray-800">{editarNumero ? `Editar compra ${editarNumero}` : "Nueva compra"}</h1>
         <p className="text-gray-600">Una compra puede tener varios productos del mismo proveedor. Impacta el inventario al guardar.</p>
       </div>

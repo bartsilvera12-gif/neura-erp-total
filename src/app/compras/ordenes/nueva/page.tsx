@@ -109,6 +109,19 @@ export default function NuevaOrdenCompraPage() {
     [lineas, tc]
   );
 
+  /**
+   * IVA contenido en el total.
+   *
+   * El costo se carga con IVA incluido, asi que cambiar Ex / 5% / 10% no mueve
+   * el total y parecia que los botones no hacian nada. Mostrar el desglose es
+   * lo que hace visible el efecto.
+   */
+  const ivaOc = useMemo(
+    () =>
+      lineas.reduce((s, l) => s + desglosarIva(l.costo_input * tc * l.cantidad, l.iva_tipo).monto_iva, 0),
+    [lineas, tc]
+  );
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
@@ -285,8 +298,12 @@ export default function NuevaOrdenCompraPage() {
                           className="mx-auto h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums" />
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <input type="number" min={0} value={l.costo_input}
+                        {/* Vacio cuando vale 0: con value={0} el campo nunca se
+                            podia borrar —el cero volvia solo— y todo lo que se
+                            escribia quedaba detras, como "030000". */}
+                        <input type="number" min={0} value={l.costo_input === 0 ? "" : l.costo_input}
                           onChange={(e) => updateLinea(l.producto_id, { costo_input: Math.max(0, Number(e.target.value) || 0) })}
+                          onBlur={(e) => { if (!e.target.value) updateLinea(l.producto_id, { costo_input: 0 }); }}
                           className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums" />
                       </td>
                       <td className="px-3 py-3">
@@ -325,6 +342,10 @@ export default function NuevaOrdenCompraPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total estimado</p>
             <p className="text-2xl font-bold tabular-nums text-slate-900">{fmtGs(totalOc)}</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              El costo se carga con IVA incluido · IVA contenido:{" "}
+              <span className="font-semibold tabular-nums text-slate-700">{fmtGs(ivaOc)}</span>
+            </p>
           </div>
           <button type="submit" disabled={enviando}
             className="inline-flex items-center gap-2 rounded-xl bg-[#4FAEB2] px-6 py-3 text-sm font-bold text-white shadow-md shadow-[#4FAEB2]/30 hover:bg-[#3F8E91] disabled:opacity-50">

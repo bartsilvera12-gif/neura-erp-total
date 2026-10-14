@@ -357,8 +357,12 @@ export default function EditarOrdenCompraPage() {
                           className="mx-auto h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums" />
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <input type="number" min={0} value={l.costo_input}
+                        {/* Vacio cuando vale 0: con value={0} el campo nunca se
+                            podia borrar —el cero volvia solo— y todo lo que se
+                            escribia quedaba detras, como "030000". */}
+                        <input type="number" min={0} value={l.costo_input === 0 ? "" : l.costo_input}
                           onChange={(e) => updateLinea(l.producto_id, { costo_input: Math.max(0, Number(e.target.value) || 0) })}
+                          onBlur={(e) => { if (!e.target.value) updateLinea(l.producto_id, { costo_input: 0 }); }}
                           className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums" />
                       </td>
                       <td className="px-3 py-3">

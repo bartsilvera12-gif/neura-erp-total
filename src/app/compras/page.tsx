@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCompras } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { formatearNumeroDocumento } from "@/lib/documentos/numero-documento";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -589,7 +590,7 @@ function EditarCompraModal({
         <div className="space-y-3 px-5 py-4">
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">Número de factura</label>
-            <input value={form.numero_factura} onChange={(e) => setForm({ ...form, numero_factura: e.target.value })} className={input} placeholder="Ej: 001-001-1234567" />
+            <input value={form.numero_factura} onChange={(e) => setForm({ ...form, numero_factura: formatearNumeroDocumento(e.target.value) })} inputMode="numeric" className={input} placeholder="Ej: 001-001-1234567" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">Fecha de factura</label>
@@ -597,7 +598,7 @@ function EditarCompraModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">Nº de timbrado</label>
-            <input value={form.nro_timbrado} onChange={(e) => setForm({ ...form, nro_timbrado: e.target.value })} className={input} />
+            <input value={form.nro_timbrado} onChange={(e) => setForm({ ...form, nro_timbrado: formatearNumeroDocumento(e.target.value) })} inputMode="numeric" className={input} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-600">Observación</label>
