@@ -41,7 +41,9 @@ export async function GET(request: NextRequest) {
               count(*)::int                        AS ventas,
               COALESCE(SUM(v.total), 0)::float8    AS total,
               COALESCE(AVG(v.total), 0)::float8    AS ticket_promedio,
-              MAX(v.fecha)                         AS ultima_venta
+              -- to_char: sin esto el driver devuelve un Date de JS y la pantalla
+              -- terminaba mostrando "Tue Oct 13 2026 17:20:25 GMT+0000".
+              to_char(MAX(v.fecha), 'YYYY-MM-DD') AS ultima_venta
          FROM ${tV} v
         WHERE v.empresa_id = $1::uuid
           AND COALESCE(v.estado, '') NOT IN ('anulada', 'devuelta_total')

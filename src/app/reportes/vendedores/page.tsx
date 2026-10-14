@@ -35,7 +35,11 @@ function hoyISO() {
 function fmtFecha(iso: string | null) {
   if (!iso) return "—";
   const [y, m, d] = String(iso).slice(0, 10).split("-");
-  return d && m && y ? `${d}/${m}/${y}` : String(iso);
+  if (d && m && y) return `${d}/${m}/${y}`;
+  // Por las dudas: si llega algo que no es YYYY-MM-DD, se muestra una fecha
+  // legible igual, nunca el texto crudo del objeto Date.
+  const f = new Date(iso);
+  return isNaN(f.getTime()) ? "—" : f.toLocaleDateString("es-PY");
 }
 
 export default function VentasPorVendedorPage() {
