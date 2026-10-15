@@ -834,3 +834,47 @@ export async function borrarCompraAnulada(
     client.release();
   }
 }
+
+/**
+ * Edita SOLO los datos de la factura de una compra.
+ *
+ * No toca productos, cantidades, costos ni stock: es para corregir el número
+ * de factura, su fecha, el timbrado o la observación después de cargarla.
+ * Como una compra son varias filas (una por producto) que comparten el mismo
+ * `numero_control`, se actualizan todas.
+ */
+export async function editarFacturaDeCompra(
+  schemaRaw: string,
+  empresaId: string,
+  numeroControl: string,
+  datos: {
+    numero_factura: string | null;
+    fecha_factura: string | null;
+    nro_timbrado: string | null;
+    observacion: string | null;
+  }
+): Promise<{ filas: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tC = quoteSchemaTable(schema, "compras");
+
+  const { rowCount } = await pool().query(
+    `UPDATE ${tC}
+        SET numero_factura = $3,
+            fecha_factura  = $4::date,
+            nro_timbrado   = $5,
+            observacion    = $6,
+            updated_at     = now()
+      WHERE empresa_id = $1::uuid AND numero_control = $2`,
+    [
+      empresaId,
+      numeroControl,
+      datos.numero_factura,
+      datos.fecha_factura,
+      datos.nro_timbrado,
+      datos.observacion,
+    ]
+  );
+
+  if (!rowCount) throw new Error("La compra no existe.");
+  return { filas: rowCount };
+}

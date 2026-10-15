@@ -11,6 +11,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import {
   borrarCompraAnulada,
   editarCompraCompleta,
+  editarFacturaDeCompra,
   getCompraByNumeroControl,
   type CompraHeaderInput,
   type CompraItemInput,
@@ -137,6 +138,53 @@ export async function DELETE(
     console.error("[api/compras/[numero_control]] DELETE:", err instanceof Error ? err.message : err);
     return NextResponse.json(
       errorResponse(err instanceof Error ? err.message : "No se pudo borrar la compra."),
+      { status: 400 }
+    );
+  }
+}
+
+/**
+ * PATCH — corrige solo los datos de la factura.
+ *
+ * El modal "Editar factura" del listado siempre llamó por PATCH, pero esta
+ * ruta solo tenía GET, PUT y DELETE: el servidor respondía 405 y el modal
+ * mostraba "Error 405". Nunca había funcionado.
+ *
+ * No toca stock ni costos; para eso está "Editar productos", que va por PUT.
+ */
+export async function PATCH(
+  request: NextRequest,
+  ctx: { params: Promise<{ numero_control: string }> }
+) {
+  try {
+    const tenant = await getTenantSupabaseFromAuth(request);
+    if (!tenant) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const schema = await fetchDataSchemaForEmpresaId(tenant.auth.empresa_id);
+    const { numero_control } = await ctx.params;
+
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const texto = (v: unknown): string | null => {
+      const s = typeof v === "string" ? v.trim() : "";
+      return s === "" ? null : s;
+    };
+
+    const { filas } = await editarFacturaDeCompra(
+      schema,
+      tenant.auth.empresa_id,
+      decodeURIComponent(numero_control),
+      {
+        numero_factura: texto(body.numero_factura),
+        fecha_factura: texto(body.fecha_factura),
+        nro_timbrado: texto(body.nro_timbrado),
+        observacion: texto(body.observacion),
+      }
+    );
+
+    return NextResponse.json(successResponse({ filas }));
+  } catch (err) {
+    console.error("[api/compras/[numero_control]] PATCH:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      errorResponse(err instanceof Error ? err.message : "No se pudo guardar la factura."),
       { status: 400 }
     );
   }
