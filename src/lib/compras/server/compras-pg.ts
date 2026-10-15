@@ -223,6 +223,72 @@ export interface ComprasMultiResult {
 }
 
 /**
+ * Cuenta por pagar de una compra a CRÉDITO, con sus cuotas.
+ *
+ * Antes esto lo hacía únicamente el paso de "convertir una factura provisoria
+ * en definitiva". Al sacar las provisorias, una compra a crédito quedaba sin
+ * cuenta por pagar y el módulo de Pagos a proveedores no mostraba nada que
+ * pagar. Ahora se genera al guardar la compra.
+ *
+ * Fecha de emisión: la de la factura del proveedor si está cargada; si no, la
+ * fecha de la compra. Vencimientos = emisión + días de gracia + plazo de cada
+ * cuota (los plazos salen de la ficha del proveedor; sin plazos, una sola
+ * cuota al día de inicio).
+ *
+ * Corre DENTRO de la transacción del caller.
+ */
+async function crearCuentaPorPagarTx(
+  client: import("pg").PoolClient,
+  schema: string,
+  empresaId: string,
+  header: CompraHeaderInput,
+  numeroControl: string,
+  total: number
+): Promise<void> {
+  if (header.tipo_pago !== "credito" || total <= 0) return;
+
+  const { calcularCuotas, addDaysYmd } = await import("@/lib/cuentas-por-pagar/server/cxp-pg");
+  const tCxp = quoteSchemaTable(schema, "cuentas_por_pagar");
+  const tCuo = quoteSchemaTable(schema, "compra_cuotas");
+  const tProv = quoteSchemaTable(schema, "proveedores");
+
+  const ymd = (v: string | null | undefined) =>
+    v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  const fechaEmision =
+    ymd(header.fecha_factura) ?? ymd(header.fecha) ?? new Date().toISOString().slice(0, 10);
+
+  const { rows: pr } = await client.query<{ dias_gracia: number | null; plazos_cuotas: number[] | null }>(
+    `SELECT dias_gracia, plazos_cuotas FROM ${tProv} WHERE id = $1::uuid AND empresa_id = $2::uuid`,
+    [header.proveedor_id, empresaId]
+  );
+  const diasGracia = Number(pr[0]?.dias_gracia) || 0;
+  const plazosProv = Array.isArray(pr[0]?.plazos_cuotas) ? pr[0].plazos_cuotas.map(Number) : [];
+  // Si el proveedor no tiene plazos cargados, se usa el plazo de la compra.
+  const plazos = plazosProv.length > 0
+    ? plazosProv
+    : [Number(header.plazo_dias) > 0 ? Number(header.plazo_dias) : 0];
+  const cuotas = calcularCuotas(total, fechaEmision, diasGracia, plazos);
+  const fechaInicio = addDaysYmd(fechaEmision, diasGracia);
+
+  const { rows: nueva } = await client.query<{ id: string }>(
+    `INSERT INTO ${tCxp} (
+       empresa_id, proveedor_id, proveedor_nombre, compra_numero_control,
+       fecha_emision, dias_gracia, fecha_inicio_pago, moneda, total, saldo, estado
+     ) VALUES ($1::uuid,$2::uuid,$3,$4,$5::date,$6::integer,$7::date,$8,$9::numeric,$9::numeric,'pendiente')
+     RETURNING id`,
+    [empresaId, header.proveedor_id, header.proveedor_nombre, numeroControl,
+     fechaEmision, diasGracia, fechaInicio, header.moneda === "USD" ? "USD" : "PYG", Math.round(total)]
+  );
+  for (const c of cuotas) {
+    await client.query(
+      `INSERT INTO ${tCuo} (empresa_id, cuenta_por_pagar_id, numero_cuota, dias_plazo, fecha_vencimiento, monto, saldo, estado)
+       VALUES ($1::uuid,$2::uuid,$3::integer,$4::integer,$5::date,$6::numeric,$6::numeric,'pendiente')`,
+      [empresaId, nueva[0].id, c.numero_cuota, c.dias_plazo, c.fecha_vencimiento, c.monto]
+    );
+  }
+}
+
+/**
  * Núcleo de "insertar compra multiproducto" reutilizable DENTRO de una
  * transacción ya abierta por el caller (ej. confirmarRecepcionOrdenCompra, que
  * necesita lockear filas de ordenes_compra + insertar la compra + actualizar
@@ -357,6 +423,11 @@ export async function insertComprasConImpactoTx(
       [empresaId, cajaId, concepto, totalCompra, header.created_by, header.usuario_nombre]
     );
   }
+
+  await crearCuentaPorPagarTx(
+    client, schema, empresaId, header, numero,
+    insertedRows.reduce((s, r) => s + (Number(r.total) || 0), 0)
+  );
 
   return {
     numero_control: numero,
@@ -538,15 +609,12 @@ export async function editarCompraCompleta(
   header: CompraHeaderInput,
   items: CompraItemInput[]
 ): Promise<ComprasMultiResult> {
-  const { calcularCuotas, addDaysYmd } = await import("@/lib/cuentas-por-pagar/server/cxp-pg");
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tC = quoteSchemaTable(schema, "compras");
   const tP = quoteSchemaTable(schema, "productos");
   const tM = quoteSchemaTable(schema, "movimientos_inventario");
   const tCxp = quoteSchemaTable(schema, "cuentas_por_pagar");
-  const tCuo = quoteSchemaTable(schema, "compra_cuotas");
   const tPag = quoteSchemaTable(schema, "pagos_proveedores");
-  const tProv = quoteSchemaTable(schema, "proveedores");
   const tPP = quoteSchemaTable(schema, "proveedor_productos");
 
   if (!Array.isArray(items) || items.length === 0) throw new Error("La compra debe tener al menos un producto.");
@@ -671,40 +739,13 @@ export async function editarCompraCompleta(
     }
     const out: ComprasMultiResult = { numero_control: numeroControl, compras: insertedRows, movimiento_warning: null };
 
-    // Regenerar la cuenta por pagar si existía y la compra es definitiva.
+    // La cuenta por pagar se rehace con los montos nuevos.
     if (cxpRows.length > 0) {
       await client.query(`DELETE FROM ${tCxp} WHERE id = $1::uuid`, [cxpRows[0].id]); // cascade cuotas
-      const fechaEmision = header.fecha_factura && /^\d{4}-\d{2}-\d{2}$/.test(header.fecha_factura)
-        ? header.fecha_factura : null;
-      if (fechaEmision) {
-        const total = out.compras.reduce((s, r) => s + (Number(r.total) || 0), 0);
-        const { rows: pr } = await client.query<{ dias_gracia: number | null; plazos_cuotas: number[] | null }>(
-          `SELECT dias_gracia, plazos_cuotas FROM ${tProv} WHERE id = $1::uuid AND empresa_id = $2::uuid`,
-          [header.proveedor_id, empresaId]
-        );
-        const diasGracia = Number(pr[0]?.dias_gracia) || 0;
-        const plazos = Array.isArray(pr[0]?.plazos_cuotas) ? pr[0].plazos_cuotas.map(Number) : [];
-        const cuotas = plazos.length > 0
-          ? calcularCuotas(total, fechaEmision, diasGracia, plazos)
-          : calcularCuotas(total, fechaEmision, diasGracia, [0]);
-        const fechaInicio = addDaysYmd(fechaEmision, diasGracia);
-        const { rows: nueva } = await client.query<{ id: string }>(
-          `INSERT INTO ${tCxp} (
-             empresa_id, proveedor_id, proveedor_nombre, compra_numero_control,
-             fecha_emision, dias_gracia, fecha_inicio_pago, moneda, total, saldo, estado
-           ) VALUES ($1::uuid,$2::uuid,$3,$4,$5::date,$6::integer,$7::date,$8,$9::numeric,$9::numeric,'pendiente')
-           RETURNING id`,
-          [empresaId, header.proveedor_id, header.proveedor_nombre, numeroControl,
-           fechaEmision, diasGracia, fechaInicio, header.moneda === "USD" ? "USD" : "PYG", Math.round(total)]
-        );
-        for (const c of cuotas) {
-          await client.query(
-            `INSERT INTO ${tCuo} (empresa_id, cuenta_por_pagar_id, numero_cuota, dias_plazo, fecha_vencimiento, monto, saldo, estado)
-             VALUES ($1::uuid,$2::uuid,$3::integer,$4::integer,$5::date,$6::numeric,$6::numeric,'pendiente')`,
-            [empresaId, nueva[0].id, c.numero_cuota, c.dias_plazo, c.fecha_vencimiento, c.monto]
-          );
-        }
-      }
+      await crearCuentaPorPagarTx(
+        client, schema, empresaId, header, numeroControl,
+        out.compras.reduce((s, r) => s + (Number(r.total) || 0), 0)
+      );
     }
 
     await client.query("COMMIT");
