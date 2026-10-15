@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { formatearNumeroDocumento, formatearTimbrado } from "@/lib/documentos/numero-documento";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 type Provisoria = {
@@ -174,12 +175,12 @@ function ConvertirModal({
         <div className="p-5 space-y-3">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">N° de factura</span>
-            <input value={numeroFactura} onChange={(e) => setNumeroFactura(e.target.value)} placeholder="Ej: 001-001-0000123"
+            <input value={numeroFactura} onChange={(e) => setNumeroFactura(formatearNumeroDocumento(e.target.value))} inputMode="numeric" placeholder="Ej: 001-001-0000123"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none" />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">N° de timbrado <span className="text-slate-400 font-normal">(opcional)</span></span>
-            <input value={nroTimbrado} onChange={(e) => setNroTimbrado(e.target.value)} placeholder="Ej: 12345678"
+            <input value={nroTimbrado} onChange={(e) => setNroTimbrado(formatearTimbrado(e.target.value))} inputMode="numeric" placeholder="Ej: 12345678"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none" />
           </label>
           <label className="block">

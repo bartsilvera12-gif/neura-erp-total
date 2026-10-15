@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { formatearTimbrado } from "@/lib/documentos/numero-documento";
 import type { AmbienteSifen, EmpresaSifenConfigDTO } from "@/lib/sifen/types";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
@@ -641,7 +642,7 @@ export default function FacturacionElectronicaSifenPage() {
             </div>
             <div>
               <label className={fLabel}>Timbrado (número)</label>
-              <input className={fInput} value={timbradoNumero} onChange={(e) => setTimbradoNumero(e.target.value)} required />
+              <input className={fInput} value={timbradoNumero} onChange={(e) => setTimbradoNumero(formatearTimbrado(e.target.value))} inputMode="numeric" required />
             </div>
             <div>
               <label className={fLabel}>Inicio vigencia del timbrado</label>

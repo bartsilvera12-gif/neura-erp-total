@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { getOrdenCompra, confirmarRecepcionOrdenCompra, type ExcedenteDetalle } from "@/lib/ordenes-compra/storage";
 import { uploadComprobante } from "@/lib/compras/storage";
+import { formatearNumeroDocumento, formatearTimbrado } from "@/lib/documentos/numero-documento";
 import type { OrdenCompra } from "@/lib/ordenes-compra/types";
 
 function fmtGs(v: number) {
@@ -303,11 +304,11 @@ export default function DesdeOrdenRecepcionPage() {
           </div>
           <div>
             <label className={labelClass}>N° de factura <span className="text-red-500">*</span></label>
-            <input value={numeroFactura} onChange={(e) => setNumeroFactura(e.target.value)} placeholder="001-001-0000123" className={inputClass} />
+            <input value={numeroFactura} onChange={(e) => setNumeroFactura(formatearNumeroDocumento(e.target.value))} inputMode="numeric" placeholder="001-001-0000123" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>N° de timbrado <span className="text-red-500">*</span></label>
-            <input value={nroTimbrado} onChange={(e) => setNroTimbrado(e.target.value)} placeholder="Ej: 12345678" className={inputClass} />
+            <input value={nroTimbrado} onChange={(e) => setNroTimbrado(formatearTimbrado(e.target.value))} inputMode="numeric" placeholder="Ej: 12345678" className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Fecha de factura</label>
