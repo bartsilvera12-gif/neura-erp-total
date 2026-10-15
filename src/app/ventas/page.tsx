@@ -1052,6 +1052,12 @@ function CambiarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
   }
 
   const totalLineaNuevo = Math.round((cantidad || 0) * (precio || 0));
+  // El precio en Paraguay es con IVA INCLUIDO: elegir 10% o 5% no sube el total,
+  // cambia cuánto impuesto viene adentro. Se muestra para que se vea que aplica.
+  const ivaIncluido =
+    tipoIva === "10%" ? Math.round(totalLineaNuevo - totalLineaNuevo / 1.1)
+    : tipoIva === "5%" ? Math.round(totalLineaNuevo - totalLineaNuevo / 1.05)
+    : 0;
   const totalVentaNuevo = venta.total - (itemSel?.total_linea ?? 0) + totalLineaNuevo;
   const diferencia = totalVentaNuevo - venta.total;
   const gs = (n: number) => `Gs. ${Math.round(n).toLocaleString("es-PY")}`;
@@ -1135,12 +1141,14 @@ function CambiarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
                   <span className="text-[11px] font-medium text-slate-600">Cantidad</span>
                   <MontoInput value={cantidad} decimals={false} disabled={loading}
                     onChange={(n) => setCantidad(Math.max(1, Math.trunc(n || 0)))}
+                    onFocus={(e) => e.currentTarget.select()}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-right text-sm outline-none focus:border-purple-400" />
                 </label>
                 <label className="block">
                   <span className="text-[11px] font-medium text-slate-600">Precio</span>
                   <MontoInput value={precio} decimals={false} disabled={loading}
                     onChange={(n) => setPrecio(Math.max(0, n || 0))}
+                    onFocus={(e) => e.currentTarget.select()}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-right text-sm outline-none focus:border-purple-400" />
                 </label>
                 <label className="block">
@@ -1155,6 +1163,10 @@ function CambiarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
               </div>
               <div className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
                 <Fila label="Total nuevo de la línea" value={gs(totalLineaNuevo)} />
+                <Fila
+                  label={tipoIva === "EXENTA" ? "Exenta de IVA" : `IVA ${tipoIva} incluido en el precio`}
+                  value={tipoIva === "EXENTA" ? "—" : gs(ivaIncluido)}
+                />
                 <Fila label="Total nuevo de la venta" value={gs(totalVentaNuevo)} />
                 <div className={`mt-1 flex items-center justify-between font-semibold ${diferencia > 0 ? "text-emerald-700" : diferencia < 0 ? "text-rose-700" : "text-slate-600"}`}>
                   <span>{diferencia > 0 ? "A cobrar" : diferencia < 0 ? "A devolver" : "Diferencia"}</span>
