@@ -8,9 +8,14 @@
  * arqueo se ajusta solo. La diferencia física (cobrar o devolver) la hace el cajero;
  * se devuelve en el resultado para avisarle.
  *
- * Guardrails (para no descuadrar): venta ACTIVA (completada), al CONTADO, pago NO
- * mixto, y su caja del día ABIERTA. Producto (viejo y nuevo) sin receta/series
- * (fuera de alcance por ahora). Corre en UNA transacción (pg pool directo).
+ * En pago MIXTO el efectivo no se deriva de `ventas.total` sino del desglose de
+ * `ventas_pagos_detalle`, así que ahí la diferencia se carga sobre la línea de
+ * EFECTIVO (es la plata que el cajero cobra o devuelve en el mostrador); las
+ * líneas de tarjeta y transferencia quedan intactas, porque esas ya se cursaron.
+ *
+ * Guardrails (para no descuadrar): venta ACTIVA (completada), al CONTADO, y la
+ * caja del día ABIERTA cuando hay efectivo de por medio. Producto (viejo y nuevo)
+ * sin receta/series (fuera de alcance por ahora). Corre en UNA transacción.
  */
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
@@ -87,18 +92,30 @@ export async function cambiarProductoVenta(
     if (!v) throw new CambiarProductoError("Venta no encontrada.");
     if (String(v.estado) !== "completada") throw new CambiarProductoError("Solo se puede cambiar el producto en ventas activas (no anuladas ni devueltas).");
     if (String(v.tipo_venta).toUpperCase() === "CREDITO") throw new CambiarProductoError("Por ahora solo ventas al contado.");
-    if (String(v.metodo_pago) === "mixto") throw new CambiarProductoError("Por ahora no se puede en ventas con pago mixto.");
 
     // 2) Caja: SOLO el efectivo afecta el arqueo (el efectivo esperado del turno se
     // deriva de ventas.total). Por eso, para ventas en EFECTIVO exigimos que su caja
     // siga ABIERTA (así el ajuste cae en el turno correcto). Las ventas por
     // TRANSFERENCIA/TARJETA no tocan el efectivo físico del arqueo → se permiten
     // aunque la caja del día ya esté cerrada (poder corregir facturas anteriores).
-    if (String(v.metodo_pago) === "efectivo") {
+    const esMixto = String(v.metodo_pago) === "mixto";
+    // En mixto el efectivo es solo la línea de efectivo del desglose; si no hay
+    // ninguna, la venta no tocó el cajón y no hace falta exigir caja abierta.
+    const lineaEfectivoQ = esMixto
+      ? await client.query(
+          `SELECT id, monto FROM ${tPagos}
+            WHERE venta_id=$1::uuid AND empresa_id=$2::uuid AND metodo_pago='efectivo'
+            ORDER BY created_at LIMIT 1 FOR UPDATE`,
+          [ventaId, empresaId]
+        )
+      : null;
+    const lineaEfectivo = lineaEfectivoQ?.rows[0] as Record<string, unknown> | undefined;
+
+    if (String(v.metodo_pago) === "efectivo" || lineaEfectivo) {
       if (!v.caja_id) throw new CambiarProductoError("La venta en efectivo no tiene caja asociada; no se puede ajustar.");
       const cQ = await client.query(`SELECT estado FROM ${tCajas} WHERE id=$1::uuid AND empresa_id=$2::uuid`, [v.caja_id, empresaId]);
       if (!cQ.rows[0] || String((cQ.rows[0] as Record<string, unknown>).estado) !== "abierta") {
-        throw new CambiarProductoError("Esta venta es en EFECTIVO y su caja ya cerró. Solo se puede cambiar el producto mientras la caja del día siga abierta (para no alterar un arqueo de efectivo cerrado).");
+        throw new CambiarProductoError("Esta venta cobró efectivo y su caja ya cerró. Solo se puede cambiar el producto mientras la caja del día siga abierta (para no alterar un arqueo de efectivo cerrado).");
       }
     }
 
@@ -199,11 +216,43 @@ export async function cambiarProductoVenta(
       [ventaId, Math.round(g10), Math.round(i10), Math.round(g5), Math.round(i5), Math.round(ex), totalNuevo, empresaId]
     );
 
-    // 9) Detalle de pago (no mixto → una sola fila): ajustar el monto al nuevo total.
-    await client.query(
-      `UPDATE ${tPagos} SET monto=$2::numeric, updated_at=now() WHERE venta_id=$1::uuid AND empresa_id=$3::uuid`,
-      [ventaId, totalNuevo, empresaId]
-    );
+    // 9) Detalle de pago.
+    if (!esMixto) {
+      // Un solo medio → una sola fila: pasa a valer el nuevo total.
+      await client.query(
+        `UPDATE ${tPagos} SET monto=$2::numeric, updated_at=now() WHERE venta_id=$1::uuid AND empresa_id=$3::uuid`,
+        [ventaId, totalNuevo, empresaId]
+      );
+    } else {
+      // Mixto: la diferencia la absorbe el EFECTIVO, que es lo que el cajero cobra
+      // o devuelve en el acto. Tarjeta y transferencia ya se cursaron (incluso
+      // pueden estar conciliadas), así que no se tocan.
+      const dif = totalNuevo - totalAnterior;
+      if (dif !== 0) {
+        const enEfectivo = num(lineaEfectivo?.monto);
+        if (!lineaEfectivo) {
+          if (dif < 0) {
+            throw new CambiarProductoError(
+              "Esta venta mixta no cobró nada en efectivo, así que no hay de dónde devolver la diferencia. Anulá la venta y volvé a cargarla."
+            );
+          }
+          await client.query(
+            `INSERT INTO ${tPagos} (empresa_id, venta_id, metodo_pago, monto, fecha_pago, observacion)
+             VALUES ($1::uuid,$2::uuid,'efectivo',$3::numeric, now(), $4)`,
+            [empresaId, ventaId, dif, obs]
+          );
+        } else if (enEfectivo + dif < 0) {
+          throw new CambiarProductoError(
+            `Hay que devolver ${Math.abs(dif).toLocaleString("es-PY")} Gs. pero la venta solo cobró ${enEfectivo.toLocaleString("es-PY")} Gs. en efectivo. Anulá la venta y volvé a cargarla.`
+          );
+        } else {
+          await client.query(
+            `UPDATE ${tPagos} SET monto=$2::numeric, updated_at=now() WHERE id=$1::uuid`,
+            [String(lineaEfectivo.id), enEfectivo + dif]
+          );
+        }
+      }
+    }
 
     await client.query("COMMIT");
     return {

@@ -127,7 +127,14 @@ function formatGsFull(n: number): string {
   return Math.round(num).toLocaleString("es-PY");
 }
 
-/** Formato abreviado (mantengo para charts/ejes donde el espacio es limitado). */
+/**
+ * Formato abreviado para charts/ejes y para el progreso de metas, donde el
+ * espacio es limitado.
+ *
+ * Abrevia recién en millones. Antes los miles se mostraban como "44K" y en la
+ * misma línea convivían dos escalas distintas ("Gs. 44K / Gs. 50M"), que es
+ * justo donde se lee mal: miles van completos, con separador.
+ */
 function formatGsM(n: number): string {
   const num = Number(n);
   if (!Number.isFinite(num) || num < 0) return "0";
@@ -139,8 +146,7 @@ function formatGsM(n: number): string {
     const m = num / 1_000_000;
     return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`;
   }
-  if (num >= 1_000) return `${Math.round(num / 1_000)}K`;
-  return num.toLocaleString("es-PY");
+  return Math.round(num).toLocaleString("es-PY");
 }
 
 function formatFecha(s: string): string {
@@ -378,12 +384,13 @@ function DonutChart({
         {segments.map((seg, i) => {
           const pct = total > 0 ? (seg.value / total) * 100 : 0;
           return (
-            <div key={i} className="flex items-center gap-2.5">
-              <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
+            /* El nombre va entero: con `truncate` en una card angosta se leía
+               "Co..." o "Saluda...". El color ya no va en un puntito aparte
+               (no hacía nada al tocarlo), va en el propio texto. */
+            <div key={i} className="flex items-baseline gap-2.5">
               <span
-                className={`min-w-0 flex-1 truncate text-xs ${isZ ? "" : "text-gray-600"}`}
-                style={isZ ? { color: Z.text } : undefined}
-                title={seg.label}
+                className="min-w-0 flex-1 text-xs font-medium leading-snug"
+                style={{ color: seg.color }}
               >
                 {seg.label}
               </span>
@@ -1034,7 +1041,10 @@ const DashFinanciero = memo(function DashFinanciero({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+      {/* Sin items-start: cada card tomaba su alto natural y la fila quedaba
+          despareja (una corta al lado de una larga). Estirándolas, el par cierra
+          a la misma altura. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className={finCard}>
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Deuda por tipo de cliente</h3>
           <p className="mt-1 text-[11px] text-slate-400">
@@ -1258,9 +1268,6 @@ const DashInventario = memo(function DashInventario({
               <table className="w-full text-sm">
                 <thead className="bg-[#E5F4F4] border-b-2 border-[#4FAEB2]/40">
                   <tr>
-                    <th className="w-10 px-3 py-3">
-                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]" />
-                    </th>
                     {["Producto", "Stock actual", "Stock mín.", "Estado", "Proveedor"].map(h => (
                       <th key={h} className="text-left text-xs font-bold text-[#3F8E91] px-3 py-3 uppercase tracking-wide">{h}</th>
                     ))}
@@ -1269,9 +1276,6 @@ const DashInventario = memo(function DashInventario({
                 <tbody className="divide-y divide-slate-100">
                   {criticos.map(p => (
                     <tr key={p.id} className={`${p.stock_actual <= 0 ? "bg-red-50/50" : "bg-amber-50/40"} transition-colors hover:bg-[#4FAEB2]/10`}>
-                      <td className="px-3 py-2.5">
-                        <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]" />
-                      </td>
                       <td className="px-3 py-2.5 text-xs font-semibold text-slate-900">{p.nombre}</td>
                       <td className="px-3 py-2.5">
                         <span className={`text-xs font-bold tabular-nums ${p.stock_actual <= 0 ? "text-red-600" : "text-amber-600"}`}>
@@ -1309,9 +1313,6 @@ const DashInventario = memo(function DashInventario({
             <table className="w-full text-sm">
               <thead className="bg-[#E5F4F4] border-b-2 border-[#4FAEB2]/40">
                 <tr>
-                  <th className="w-10 px-3 py-3">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]" />
-                  </th>
                   {["Producto", "SKU", "Stock", "Costo promedio", "Valor inventario"].map(h => (
                     <th key={h} className="text-left text-xs font-bold text-[#3F8E91] px-3 py-3 uppercase tracking-wide">{h}</th>
                   ))}
@@ -1320,9 +1321,6 @@ const DashInventario = memo(function DashInventario({
               <tbody className="divide-y divide-slate-100">
                 {topPorValor.map(p => (
                   <tr key={p.id} className="transition-colors hover:bg-[#4FAEB2]/10">
-                    <td className="px-3 py-2.5">
-                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]" />
-                    </td>
                     <td className="px-3 py-2.5 text-xs font-semibold text-slate-900">{p.nombre}</td>
                     <td className="px-3 py-2.5 font-mono text-xs font-medium text-[#3F8E91]">{p.sku}</td>
                     <td className="px-3 py-2.5 text-xs tabular-nums font-medium text-slate-700">{p.stock_actual}</td>

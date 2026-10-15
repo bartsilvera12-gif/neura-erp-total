@@ -6,6 +6,7 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import ClienteSelectorBuscador from "@/components/clientes/ClienteSelectorBuscador";
 import MobileFab from "@/components/ui/MobileFab";
+import MontoInput from "@/components/ui/MontoInput";
 import { getVentas } from "@/lib/ventas/storage";
 import PedidosConsultaPendientes from "./PedidosConsultaPendientes";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
@@ -1127,14 +1128,19 @@ function CambiarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
                 <button type="button" onClick={() => setNuevo(null)} className="text-xs text-purple-600 hover:underline">Cambiar</button>
               </div>
               <div className="grid grid-cols-3 gap-2">
+                {/* MontoInput y no <input type="number">: en un campo numérico el
+                    navegador deja el cero de arranque adelante ("020.000") porque
+                    React no repinta un valor que, como número, no cambió. */}
                 <label className="block">
                   <span className="text-[11px] font-medium text-slate-600">Cantidad</span>
-                  <input type="number" min={1} value={cantidad} onChange={(e) => setCantidad(Math.max(1, Math.trunc(Number(e.target.value) || 0)))} disabled={loading}
+                  <MontoInput value={cantidad} decimals={false} disabled={loading}
+                    onChange={(n) => setCantidad(Math.max(1, Math.trunc(n || 0)))}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-right text-sm outline-none focus:border-purple-400" />
                 </label>
                 <label className="block">
                   <span className="text-[11px] font-medium text-slate-600">Precio</span>
-                  <input type="number" min={0} value={precio} onChange={(e) => setPrecio(Math.max(0, Number(e.target.value) || 0))} disabled={loading}
+                  <MontoInput value={precio} decimals={false} disabled={loading}
+                    onChange={(n) => setPrecio(Math.max(0, n || 0))}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-right text-sm outline-none focus:border-purple-400" />
                 </label>
                 <label className="block">

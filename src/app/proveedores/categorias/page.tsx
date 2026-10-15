@@ -156,11 +156,14 @@ export default function ProveedorCategoriasPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
+            {/* Anchos fijos en las columnas cortas: con pocas filas la tabla
+                repartía el ancho a ojo y "Acciones" quedaba a un lado de su
+                propio contenido, con medio cuadro vacío en el medio. */}
             <tr className="border-b border-slate-100 text-slate-600">
-              <th className="py-3 pr-4 font-semibold">Nombre</th>
+              <th className="w-1/4 py-3 pr-4 font-semibold">Nombre</th>
               <th className="py-3 pr-4 font-semibold">Descripción</th>
-              <th className="py-3 pr-4 font-semibold">Activo</th>
-              <th className="py-3 font-semibold">Acciones</th>
+              <th className="w-28 py-3 pr-4 text-center font-semibold">Activo</th>
+              <th className="w-40 py-3 text-right font-semibold">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -184,12 +187,12 @@ export default function ProveedorCategoriasPage() {
                     c.descripcion ?? "—"
                   )}
                 </td>
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-4 text-center">
                   <ToggleActivo activo={c.activo} onToggle={() => toggleActivo(c)} />
                 </td>
                 <td className="py-3">
                   {editingId === c.id ? (
-                    <div className="flex gap-2">
+                    <div className="flex items-center justify-end gap-3">
                       <button
                         type="button"
                         onClick={() => void saveEdit()}
