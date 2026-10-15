@@ -638,11 +638,11 @@ export default function EditarProductoPage() {
             />
           </div>
 
-          {/* Clasificación, Proveedor, Ubicación */}
+          {/* Clasificación y proveedor */}
           <div className="border-t border-slate-100 pt-6">
             <div className="flex items-baseline justify-between mb-3">
               <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
-                Clasificación y ubicación
+                Clasificación y proveedor
               </p>
               <span className="text-xs text-gray-400">Opcional</span>
             </div>
