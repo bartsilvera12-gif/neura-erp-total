@@ -76,6 +76,7 @@ export async function cambiarProductoVenta(
   const tCajas = quoteSchemaTable(schema, "cajas");
   const tPagos = quoteSchemaTable(schema, "ventas_pagos_detalle");
   const tFa = quoteSchemaTable(schema, "factura_autoimpresor");
+  const tRecetas = quoteSchemaTable(schema, "recetas");
 
   const client = await pool.connect();
   try {
@@ -142,7 +143,18 @@ export async function cambiarProductoVenta(
     );
     const nuevo = nuevoQ.rows[0] as Record<string, unknown> | undefined;
     if (!nuevo) throw new CambiarProductoError("El producto nuevo no existe.");
-    if (String(nuevo.modo_receta ?? "") === "preparado_al_vender") throw new CambiarProductoError("El producto nuevo usa receta; no se puede cambiar por acá todavía.");
+    // Receta = tener una fila activa en `recetas`, igual que al vender. Antes se
+    // miraba `modo_receta`, que es solo CUÁNDO se consume la receta y viene en
+    // 'preparado_al_vender' por defecto: con eso, TODOS los productos quedaban
+    // marcados como "usa receta" y el cambio no se podía guardar nunca.
+    const recetaQ = await client.query(
+      `SELECT producto_id FROM ${tRecetas}
+        WHERE empresa_id=$1::uuid AND activa = true AND producto_id = ANY($2::uuid[])`,
+      [empresaId, [p.nuevoProductoId, viejoProductoId]]
+    );
+    const conReceta = new Set((recetaQ.rows as Array<Record<string, unknown>>).map((r) => String(r.producto_id)));
+    if (conReceta.has(p.nuevoProductoId)) throw new CambiarProductoError("El producto nuevo usa receta; no se puede cambiar por acá todavía.");
+    if (conReceta.has(viejoProductoId)) throw new CambiarProductoError("El producto que se quiere sacar usa receta; no se puede cambiar por acá todavía.");
     if (nuevo.maneja_series === true) throw new CambiarProductoError("El producto nuevo maneja series; no se puede cambiar por acá todavía.");
 
     const numeroControl = String(v.numero_control);
