@@ -22,7 +22,6 @@ const TIPO_SUMMARY: Record<"reventa" | "menu" | "materia", { titulo: string; des
 };
 
 interface CatRow { id: string; nombre: string }
-interface UbiRow { id: string; nombre: string; tipo: string }
 interface ProvRow { id: string; nombre: string }
 
 export default function EditarProductoPage() {
@@ -73,7 +72,6 @@ export default function EditarProductoPage() {
   const [categorias, setCategorias] = useState<CatRow[]>([]);
   const [marcas, setMarcas] = useState<CatRow[]>([]);
   const [lineas, setLineas] = useState<CatRow[]>([]);
-  const [ubicaciones, setUbicaciones] = useState<UbiRow[]>([]);
   const [proveedores, setProveedores] = useState<ProvRow[]>([]);
 
   // Clasificación gastronómica
@@ -125,16 +123,14 @@ export default function EditarProductoPage() {
       } catch { return null; }
     }
     (async () => {
-      const [cats, ubis, provs, mrc, lns] = await Promise.all([
+      const [cats, provs, mrc, lns] = await Promise.all([
         load("/api/inventario/categorias"),
-        load("/api/inventario/ubicaciones"),
         load("/api/proveedores"),
         load("/api/marcas"),
         load("/api/lineas-producto"),
       ]);
       if (cancel) return;
       if (cats?.categorias) setCategorias(cats.categorias as CatRow[]);
-      if (ubis?.ubicaciones) setUbicaciones(ubis.ubicaciones as UbiRow[]);
       if (provs?.proveedores) setProveedores(provs.proveedores as ProvRow[]);
       if (mrc?.filas) setMarcas(mrc.filas as CatRow[]);
       if (lns?.filas) setLineas(lns.filas as CatRow[]);
@@ -787,27 +783,6 @@ export default function EditarProductoPage() {
                   </span>
                   <Link
                     href="/proveedores/nuevo"
-                    className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
-                  >
-                    + Crear
-                  </Link>
-                </div>
-              </div>
-              {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía). */}
-              <div className="hidden md:col-span-4 min-w-0">
-                <label className={labelClass}>Ubicación principal</label>
-                <SelectFromList
-                  value={ubicacionId}
-                  onChange={setUbicacionId}
-                  options={ubicaciones.map((u) => ({ id: u.id, label: u.nombre, sublabel: u.tipo }))}
-                  emptyShort="Sin ubicaciones"
-                />
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-400 truncate">
-                    {ubicaciones.length === 0 ? "Todavía no cargaste ubicaciones." : `${ubicaciones.length} disponibles`}
-                  </span>
-                  <Link
-                    href="/inventario/ubicaciones"
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
