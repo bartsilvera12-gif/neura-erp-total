@@ -197,10 +197,6 @@ export interface CompraHeaderInput {
   descuenta_caja?: boolean;
   /** Fecha de la compra (YYYY-MM-DD). Si null/undefined, usa now(). Permite backdate. */
   fecha?: string | null;
-  /** Estado inicial de las filas ('registrada' por defecto, 'provisoria' para factura provisoria). */
-  estado?: string;
-  /** Si viene, se APPENDEA a ese numero_control (agregar productos a una provisoria) en vez de generar uno nuevo. */
-  numero_control_existente?: string | null;
 }
 
 /** Una línea (producto) de la compra. */
@@ -249,11 +245,8 @@ export async function insertComprasConImpactoTx(
 
   const insertedRows: CompraRow[] = [];
   const warnings: string[] = [];
-  // Para provisorias que se van cargando, se reutiliza el numero_control existente.
-  const numero = header.numero_control_existente?.trim()
-    ? header.numero_control_existente.trim()
-    : await nextNumeroControl(client, schema, empresaId);
-  const estadoFila = header.estado === "provisoria" ? "provisoria" : "registrada";
+  const numero = await nextNumeroControl(client, schema, empresaId);
+  const estadoFila = "registrada";
 
   for (const [lineaOrden, it] of items.entries()) {
     const { rows: compraRows } = await client.query<CompraRow>(
@@ -536,7 +529,7 @@ export async function insertCompraConImpacto(
  *   3) borra las líneas viejas y reinserta las nuevas con el MISMO numero_control
  *      (reaplicando stock, costo_promedio, precio_venta y proveedor_producto)
  *   4) si tenía cuenta por pagar (definitiva a crédito), la regenera con el nuevo total
- * Mantiene el estado (provisoria sigue provisoria).
+ * La compra queda registrada, como estaba.
  */
 export async function editarCompraCompleta(
   schemaRaw: string,
@@ -562,14 +555,13 @@ export async function editarCompraCompleta(
   try {
     await client.query("BEGIN");
 
-    const { rows: viejas } = await client.query<{ producto_id: string; producto_nombre: string; cantidad: string; costo_unitario: string; estado: string }>(
-      `SELECT producto_id, producto_nombre, cantidad::text, costo_unitario::text, estado FROM ${tC}
+    const { rows: viejas } = await client.query<{ producto_id: string; producto_nombre: string; cantidad: string; costo_unitario: string }>(
+      `SELECT producto_id, producto_nombre, cantidad::text, costo_unitario::text FROM ${tC}
         WHERE empresa_id = $1::uuid AND numero_control = $2 AND anulada_at IS NULL
         FOR UPDATE`,
       [empresaId, numeroControl]
     );
     if (viejas.length === 0) throw new Error("Compra no encontrada o anulada.");
-    const estadoPrev = viejas[0].estado === "provisoria" ? "provisoria" : "registrada";
 
     // Guard: si hay cuenta por pagar con pagos registrados, no se edita.
     const { rows: cxpRows } = await client.query<{ id: string }>(
@@ -671,7 +663,7 @@ export async function editarCompraCompleta(
           it.iva_tipo, it.subtotal, it.monto_iva, it.total, it.precio_venta, it.margen_venta,
           header.tipo_pago, header.plazo_dias, header.nro_timbrado, header.numero_factura,
           header.fecha_factura ?? null, header.observacion ?? null,
-          numeroControl, estadoPrev, header.fecha ?? null, header.created_by, header.usuario_nombre,
+          numeroControl, "registrada", header.fecha ?? null, header.created_by, header.usuario_nombre,
           lineaOrden + 1,
         ]
       );
@@ -684,7 +676,7 @@ export async function editarCompraCompleta(
       await client.query(`DELETE FROM ${tCxp} WHERE id = $1::uuid`, [cxpRows[0].id]); // cascade cuotas
       const fechaEmision = header.fecha_factura && /^\d{4}-\d{2}-\d{2}$/.test(header.fecha_factura)
         ? header.fecha_factura : null;
-      if (estadoPrev === "registrada" && fechaEmision) {
+      if (fechaEmision) {
         const total = out.compras.reduce((s, r) => s + (Number(r.total) || 0), 0);
         const { rows: pr } = await client.query<{ dias_gracia: number | null; plazos_cuotas: number[] | null }>(
           `SELECT dias_gracia, plazos_cuotas FROM ${tProv} WHERE id = $1::uuid AND empresa_id = $2::uuid`,

@@ -2,9 +2,7 @@
  * Cuentas por pagar a proveedores (PG directo, schema del tenant).
  *
  * Modelo:
- *  - Factura provisoria: filas de `compras` con estado='provisoria' (stock ya impactó).
- *  - Convertir a definitiva: se completan datos de factura, las filas pasan a
- *    'registrada' y se genera 1 `cuentas_por_pagar` + N `compra_cuotas`.
+ *  - Una compra a crédito genera 1 `cuentas_por_pagar` + N `compra_cuotas`.
  *  - Cuotas automáticas: fecha_vencimiento = fecha_factura + dias_gracia + plazo_i.
  *    Monto por cuota = total / N (la última absorbe el redondeo).
  *  - Pagos parciales: `pagos_proveedores` descuenta saldo de la cuota y de la cuenta.
@@ -67,13 +65,6 @@ export function calcularCuotas(
   return cuotas;
 }
 
-export interface ConvertirProvisoriaInput {
-  numeroControl: string;
-  numeroFactura: string;
-  nroTimbrado?: string | null;
-  fechaFactura: string; // YYYY-MM-DD
-}
-
 export interface CuentaPorPagarResumen {
   id: string;
   compra_numero_control: string | null;
@@ -82,135 +73,6 @@ export interface CuentaPorPagarResumen {
   estado: string;
   cuotas: number;
 }
-
-/**
- * Convierte una provisoria en definitiva y genera la cuenta por pagar + cuotas.
- * Todo en una transacción. Devuelve el resumen de la cuenta creada.
- */
-export async function convertirProvisoriaEnDefinitiva(
-  schemaRaw: string,
-  empresaId: string,
-  input: ConvertirProvisoriaInput
-): Promise<CuentaPorPagarResumen> {
-  const schema = assertAllowedChatDataSchema(schemaRaw);
-  const tC = quoteSchemaTable(schema, "compras");
-  const tProv = quoteSchemaTable(schema, "proveedores");
-  const tCxp = quoteSchemaTable(schema, "cuentas_por_pagar");
-  const tCuo = quoteSchemaTable(schema, "compra_cuotas");
-
-  const numero = input.numeroControl.trim();
-  const fechaFactura = input.fechaFactura;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFactura)) {
-    throw new Error("fecha_factura inválida (YYYY-MM-DD).");
-  }
-  if (!input.numeroFactura?.trim()) {
-    throw new Error("El número de factura es obligatorio para convertir en definitiva.");
-  }
-
-  const client = await pool().connect();
-  try {
-    await client.query("BEGIN");
-
-    // Filas de la provisoria (lock).
-    const { rows: filas } = await client.query<{
-      total: string | number;
-      proveedor_id: string | null;
-      proveedor_nombre: string | null;
-      moneda: string | null;
-      estado: string;
-    }>(
-      `SELECT total, proveedor_id, proveedor_nombre, moneda, estado
-         FROM ${tC}
-        WHERE empresa_id = $1::uuid AND numero_control = $2
-        FOR UPDATE`,
-      [empresaId, numero]
-    );
-    if (filas.length === 0) throw new Error("No se encontró la compra provisoria.");
-    if (!filas.some((f) => f.estado === "provisoria")) {
-      throw new Error("Esa compra no está en estado provisoria (ya fue convertida).");
-    }
-
-    const total = round2(filas.reduce((s, f) => s + (Number(f.total) || 0), 0));
-    const proveedorId = filas[0].proveedor_id;
-    const proveedorNombre = filas[0].proveedor_nombre;
-    const moneda = filas[0].moneda || "PYG";
-
-    // Pasar filas a definitiva + datos de factura.
-    await client.query(
-      `UPDATE ${tC}
-          SET estado = 'registrada',
-              numero_factura = $3,
-              nro_timbrado = COALESCE($4, nro_timbrado),
-              fecha_factura = $5::date
-        WHERE empresa_id = $1::uuid AND numero_control = $2`,
-      [empresaId, numero, input.numeroFactura.trim(), input.nroTimbrado?.trim() || null, fechaFactura]
-    );
-
-    // Config del proveedor (gracia + plazos).
-    let diasGracia = 0;
-    let plazos: number[] = [];
-    if (proveedorId) {
-      const { rows: pr } = await client.query<{ dias_gracia: number | null; plazos_cuotas: number[] | null }>(
-        `SELECT dias_gracia, plazos_cuotas FROM ${tProv}
-          WHERE id = $1::uuid AND empresa_id = $2::uuid LIMIT 1`,
-        [proveedorId, empresaId]
-      );
-      if (pr[0]) {
-        diasGracia = Number(pr[0].dias_gracia) || 0;
-        plazos = Array.isArray(pr[0].plazos_cuotas) ? pr[0].plazos_cuotas.map(Number) : [];
-      }
-    }
-    // Si el proveedor no tiene plazos, se crea una única cuota al fin de la gracia.
-    const cuotas = plazos.length > 0
-      ? calcularCuotas(total, fechaFactura, diasGracia, plazos)
-      : calcularCuotas(total, fechaFactura, diasGracia, [0]);
-
-    const fechaInicioPago = addDaysYmd(fechaFactura, diasGracia);
-
-    // Cuenta por pagar (upsert por numero_control: si ya existía, la reemplaza).
-    await client.query(
-      `DELETE FROM ${tCxp} WHERE empresa_id = $1::uuid AND compra_numero_control = $2`,
-      [empresaId, numero]
-    );
-    const { rows: cxpRows } = await client.query<{ id: string }>(
-      `INSERT INTO ${tCxp} (
-         empresa_id, proveedor_id, proveedor_nombre, compra_numero_control,
-         fecha_emision, dias_gracia, fecha_inicio_pago, moneda, total, saldo, estado
-       ) VALUES (
-         $1::uuid, $2::uuid, $3, $4, $5::date, $6::integer, $7::date, $8, $9::numeric, $9::numeric, 'pendiente'
-       ) RETURNING id`,
-      [empresaId, proveedorId, proveedorNombre, numero, fechaFactura, diasGracia, fechaInicioPago, moneda, total]
-    );
-    const cuentaId = cxpRows[0].id;
-
-    for (const c of cuotas) {
-      await client.query(
-        `INSERT INTO ${tCuo} (
-           empresa_id, cuenta_por_pagar_id, numero_cuota, dias_plazo,
-           fecha_vencimiento, monto, saldo, estado
-         ) VALUES ($1::uuid, $2::uuid, $3::integer, $4::integer, $5::date, $6::numeric, $6::numeric, 'pendiente')`,
-        [empresaId, cuentaId, c.numero_cuota, c.dias_plazo, c.fecha_vencimiento, c.monto]
-      );
-    }
-
-    await client.query("COMMIT");
-    return {
-      id: cuentaId,
-      compra_numero_control: numero,
-      total,
-      saldo: total,
-      estado: "pendiente",
-      cuotas: cuotas.length,
-    };
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => null);
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-// ── Lecturas para el panel ──────────────────────────────────────────────────
 
 export interface CuotaRow {
   id: string;
@@ -339,50 +201,3 @@ export async function registrarPagoProveedor(
 }
 
 // ── Provisorias (para la UI de compras) ─────────────────────────────────────
-
-export interface ProvisoriaResumen {
-  numero_control: string;
-  proveedor_id: string | null;
-  proveedor_nombre: string | null;
-  moneda: string;
-  total: number;
-  items: number;
-  fecha: string | null;
-}
-
-/** Lista las compras en estado provisoria, agrupadas por numero_control. */
-export async function listProvisorias(schemaRaw: string, empresaId: string): Promise<ProvisoriaResumen[]> {
-  const schema = assertAllowedChatDataSchema(schemaRaw);
-  const tC = quoteSchemaTable(schema, "compras");
-  const { rows } = await pool().query<{
-    numero_control: string;
-    proveedor_id: string | null;
-    proveedor_nombre: string | null;
-    moneda: string | null;
-    total: string;
-    items: string;
-    fecha: string | null;
-  }>(
-    `SELECT numero_control,
-            MAX(proveedor_id::text) AS proveedor_id,
-            MAX(proveedor_nombre) AS proveedor_nombre,
-            MAX(moneda) AS moneda,
-            COALESCE(SUM(total),0) AS total,
-            COUNT(*) AS items,
-            to_char(MAX(fecha), 'YYYY-MM-DD') AS fecha
-       FROM ${tC}
-      WHERE empresa_id = $1::uuid AND estado = 'provisoria'
-      GROUP BY numero_control
-      ORDER BY MAX(fecha) DESC`,
-    [empresaId]
-  );
-  return rows.map((r) => ({
-    numero_control: r.numero_control,
-    proveedor_id: r.proveedor_id,
-    proveedor_nombre: r.proveedor_nombre,
-    moneda: r.moneda || "PYG",
-    total: Number(r.total) || 0,
-    items: Number(r.items) || 0,
-    fecha: r.fecha,
-  }));
-}

@@ -99,7 +99,6 @@ const MENU_STRUCTURE: MenuItem[] = [
     icon: Package,
     children: [
       { label: "Órdenes", href: "/compras" },
-      { label: "Facturas provisorias", href: "/compras/provisorias" },
       { label: "Proveedores", href: "/proveedores" },
     ],
   },

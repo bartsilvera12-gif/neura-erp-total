@@ -50,10 +50,8 @@ export async function PUT(
 
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const req = (k: string) => body[k] != null && String(body[k]).trim() !== "";
-    const esProvisoria = body.estado === "provisoria";
-
     if (!req("proveedor_id")) return NextResponse.json(errorResponse("Falta el proveedor."), { status: 400 });
-    if (!esProvisoria && !req("numero_factura"))
+    if (!req("numero_factura"))
       return NextResponse.json(errorResponse("Falta el N° de factura."), { status: 400 });
 
     const rawItems: Record<string, unknown>[] = Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : [];

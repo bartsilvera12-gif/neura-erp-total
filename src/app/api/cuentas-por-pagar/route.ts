@@ -9,8 +9,8 @@ import { listCuotas, registrarPagoProveedor } from "@/lib/cuentas-por-pagar/serv
  * Cuentas por pagar: las cuotas de las compras a proveedores.
  *
  * El motor (listCuotas / registrarPagoProveedor) ya existía y es transaccional,
- * pero nunca se había expuesto: solo lo usaban las facturas provisorias. Sin
- * API ni pantalla, el módulo "Pagos" del menú terminaba mostrando Cobranzas.
+ * pero no estaba expuesto: sin API ni pantalla, el módulo "Pagos" del menú
+ * terminaba mostrando Cobranzas.
  */
 
 export async function GET(request: NextRequest) {

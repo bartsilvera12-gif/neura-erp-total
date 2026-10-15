@@ -39,14 +39,10 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const req = (k: string) => body[k] != null && String(body[k]).trim() !== "";
 
-    // Factura provisoria: se cargan productos durante el mes sin datos de factura;
-    // el timbrado y el N° de factura se completan al convertir en definitiva.
-    const esProvisoria = body.estado === "provisoria";
-
     if (!req("proveedor_id")) return NextResponse.json(errorResponse("Falta el proveedor."), { status: 400 });
-    if (!esProvisoria && !req("nro_timbrado"))
+    if (!req("nro_timbrado"))
       return NextResponse.json(errorResponse("Falta el N° de timbrado."), { status: 400 });
-    if (!esProvisoria && !req("numero_factura"))
+    if (!req("numero_factura"))
       return NextResponse.json(errorResponse("Falta el N° de factura."), { status: 400 });
 
     const ivaOk = (v: unknown) => (["exenta", "0", "5", "10"].includes(String(v)) ? (String(v) === "0" ? "exenta" : String(v)) : "10");
@@ -80,8 +76,6 @@ export async function POST(request: NextRequest) {
       usuario_nombre: ctx.auth.user?.email ?? null,
       descuenta_caja: body.descuenta_caja === true,
       fecha: typeof body.fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.fecha) ? body.fecha : null,
-      estado: esProvisoria ? "provisoria" : "registrada",
-      numero_control_existente: req("numero_control") ? String(body.numero_control).trim() : null,
     };
 
     const items: CompraItemInput[] = [];
