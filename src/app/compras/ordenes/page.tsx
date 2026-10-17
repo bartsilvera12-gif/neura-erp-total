@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import Link from "next/link";
 import { getOrdenesCompra, deleteOrdenCompra } from "@/lib/ordenes-compra/storage";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
@@ -46,6 +47,9 @@ export default function OrdenesCompraPage() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrdenCompra | "">("");
   const [anularTarget, setAnularTarget] = useState<Grupo | null>(null);
+  const [borrarTarget, setBorrarTarget] = useState<Grupo | null>(null);
+  const [borrando, setBorrando] = useState(false);
+  const [errBorrar, setErrBorrar] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -173,12 +177,7 @@ export default function OrdenesCompraPage() {
                             </Link>
                             <button
                               type="button"
-                              onClick={async () => {
-                                if (!confirm(`¿Eliminar la orden ${g.numero_oc}? Esta acción no se puede deshacer.`)) return;
-                                const r = await deleteOrdenCompra(g.numero_oc);
-                                if (!r.success) { alert(r.error); return; }
-                                setReloadKey((k) => k + 1);
-                              }}
+                              onClick={() => { setBorrarTarget(g); setErrBorrar(null); }}
                               className="text-xs font-semibold text-red-700 hover:underline"
                               title="Eliminar OC (solo pendientes)"
                             >
@@ -205,6 +204,48 @@ export default function OrdenesCompraPage() {
           </div>
         )}
       </div>
+
+      {borrarTarget && (
+        /* Confirmación en la página y no confirm() del navegador: Chrome deja
+           de mostrar esos diálogos después de varios seguidos y el botón
+           quedaba sin hacer nada, sin aviso. */
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+          onClick={() => setBorrarTarget(null)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border-2 border-red-200 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-red-100 bg-red-50/60 px-5 py-4">
+              <h3 className="text-base font-bold text-red-800">Eliminar {borrarTarget.numero_oc}</h3>
+              <p className="mt-1 text-xs text-red-700">
+                La orden se borra del sistema. No se puede deshacer.
+              </p>
+            </div>
+            <div className="space-y-3 p-5">
+              {errBorrar && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{errBorrar}</div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={borrando} onClick={() => setBorrarTarget(null)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  Volver
+                </button>
+                <button type="button" disabled={borrando}
+                  onClick={async () => {
+                    setBorrando(true);
+                    setErrBorrar(null);
+                    const r = await deleteOrdenCompra(borrarTarget.numero_oc);
+                    setBorrando(false);
+                    if (!r.success) { setErrBorrar(r.error); return; }
+                    setBorrarTarget(null);
+                    setReloadKey((k) => k + 1);
+                  }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                  {borrando ? "Eliminando…" : "Eliminar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {anularTarget && (
         <AnularOcModal
@@ -234,7 +275,10 @@ function AnularOcModal({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
+      // fetchWithSupabaseSession: manda el token de la sesión además de la
+      // cookie. Con fetch pelado, una sesión vencida devolvía la pantalla de
+      // login (que no es JSON) y el modal se quedaba sin decir nada.
+      const res = await fetchWithSupabaseSession(
         `/api/ordenes-compra/${encodeURIComponent(orden.numero_oc)}/anular`,
         {
           method: "POST",
@@ -242,8 +286,12 @@ function AnularOcModal({
           body: JSON.stringify({ motivo: motivo.trim() || null }),
         }
       );
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error ?? `Error ${res.status}`);
+      const json = (await res.json().catch(() => null)) as { success?: boolean; error?: unknown } | null;
+      if (!res.ok || json?.success === false) {
+        if (res.status === 401) throw new Error("Tu sesión venció. Entrá de nuevo y repetí la operación.");
+        const detalle = typeof json?.error === "string" ? json.error : null;
+        throw new Error(detalle ?? `No se pudo completar (error ${res.status}).`);
+      }
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo anular.");

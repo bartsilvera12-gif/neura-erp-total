@@ -255,6 +255,7 @@ export default function DesdeOrdenRecepcionPage() {
                         disabled={!r.llego}
                         value={r.cantidad}
                         onChange={(e) => setLinea(l.id, { cantidad: e.target.value })}
+                        onFocus={(e) => e.currentTarget.select()}
                         className={`w-24 rounded-lg border px-2 py-1.5 text-right text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 disabled:bg-slate-100 disabled:text-slate-400 ${excede ? "border-amber-400" : "border-slate-200"}`}
                       />
                     )}

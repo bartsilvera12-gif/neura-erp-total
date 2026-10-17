@@ -818,6 +818,7 @@ export default function NuevaCompraPage() {
                         <td className="py-2 px-2">
                           <input type="number" min={0} step="any" value={l.cantidad || ""}
                             onChange={(e) => editarLinea(i, { cantidad: parseFloat(e.target.value) || 0 })}
+                            onFocus={(e) => e.currentTarget.select()}
                             className="w-14 rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20" />
                         </td>
                         <td className="py-2 px-2">
@@ -828,6 +829,7 @@ export default function NuevaCompraPage() {
                               type="number" min={0} step="0.01" inputMode="decimal"
                               value={l.costo_unitario_input || ""}
                               onChange={(e) => editarLinea(i, { costo_unitario_input: Number(e.target.value) || 0 })}
+                              onFocus={(e) => e.currentTarget.select()}
                               placeholder="0.00"
                               className="w-24 rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20" />
                           ) : (

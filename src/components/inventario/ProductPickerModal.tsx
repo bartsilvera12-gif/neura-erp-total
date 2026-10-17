@@ -543,6 +543,7 @@ export default function ProductPickerModal({
                         type="number" min={1}
                         value={cantidad}
                         onChange={(e) => setCantidad(e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
                       />
                       {presSel && presSel.cantidad_base !== 1 && (parseInt(cantidad, 10) || 0) > 0 && (
@@ -563,6 +564,7 @@ export default function ProductPickerModal({
                         type="number" min={0}
                         value={precio}
                         onChange={(e) => setPrecio(e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
                       />
                       {moneda === "USD" && (parseFloat(precio) || 0) > 0 && (

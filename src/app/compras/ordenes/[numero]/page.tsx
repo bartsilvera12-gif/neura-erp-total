@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getOrdenCompra, cancelarOrdenCompra } from "@/lib/ordenes-compra/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { OrdenCompra, EstadoOrdenCompra } from "@/lib/ordenes-compra/types";
 
 function fmtGs(v: number) {
@@ -41,6 +42,9 @@ export default function OrdenCompraDetallePage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
+  /** 'cancelar' (OC pendiente) o 'anular' (OC con mercadería recibida). */
+  const [pidiendoBaja, setPidiendoBaja] = useState<"cancelar" | "anular" | null>(null);
+  const [motivo, setMotivo] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -56,16 +60,51 @@ export default function OrdenCompraDetallePage() {
   const totalIva = useMemo(() => lineas.reduce((s, l) => s + l.monto_iva, 0), [lineas]);
   const puedeRecibir = cab?.estado === "pendiente" || cab?.estado === "recibida_parcial";
 
-  async function onCancelar() {
-    if (!confirm("¿Cancelar esta orden de compra? No se podrá recibir después.")) return;
-    const motivo = prompt("Motivo (opcional):") ?? null;
+  /**
+   * Cancelar / anular la OC.
+   *
+   * Antes esto pedía la confirmación y el motivo con confirm() y prompt() del
+   * navegador. Si el navegador los bloquea —Chrome los suprime después de
+   * varios diálogos seguidos— confirm() devuelve false y el botón no hacía
+   * absolutamente nada, sin error ni aviso. Ahora se pide acá, en la página.
+   *
+   * Pendiente → cancelar (no hay nada recibido).
+   * Recibida (parcial o total) → anular, que además devuelve el stock.
+   */
+  async function confirmarBaja() {
     setProcesando(true);
     setErr(null);
-    const r = await cancelarOrdenCompra(numeroOc, motivo);
-    setProcesando(false);
-    if (!r.success) { setErr(r.error); return; }
-    setMsg("Orden cancelada.");
-    cargar();
+    setMsg(null);
+    try {
+      if (pidiendoBaja === "cancelar") {
+        const r = await cancelarOrdenCompra(numeroOc, motivo.trim() || null);
+        if (!r.success) { setErr(r.error); return; }
+        setMsg("Orden cancelada.");
+      } else {
+        const res = await fetchWithSupabaseSession(
+          `/api/ordenes-compra/${encodeURIComponent(numeroOc)}/anular`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ motivo: motivo.trim() || null }),
+          }
+        );
+        const json = (await res.json().catch(() => null)) as { success?: boolean; error?: unknown; data?: { unidades_devueltas?: number } } | null;
+        if (!res.ok || json?.success === false) {
+          if (res.status === 401) { setErr("Tu sesión venció. Entrá de nuevo y repetí la operación."); return; }
+          const detalle = typeof json?.error === "string" ? json.error : null;
+          setErr(detalle ?? `No se pudo anular (error ${res.status}).`);
+          return;
+        }
+        const u = Number(json?.data?.unidades_devueltas) || 0;
+        setMsg(u > 0 ? `Orden anulada. Se devolvieron ${u} unidades al stock.` : "Orden anulada.");
+      }
+      setPidiendoBaja(null);
+      setMotivo("");
+      cargar();
+    } finally {
+      setProcesando(false);
+    }
   }
 
   if (cargando) return <p className="py-10 text-center text-slate-500 animate-pulse">Cargando…</p>;
@@ -103,11 +142,18 @@ export default function OrdenCompraDetallePage() {
                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Editar
               </Link>
-              <button onClick={onCancelar} disabled={procesando}
+              <button onClick={() => { setPidiendoBaja("cancelar"); setMotivo(""); }} disabled={procesando}
                 className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
                 Cancelar OC
               </button>
             </>
+          )}
+          {(cab.estado === "recibida_parcial" || cab.estado === "recibida_total") && (
+            <button onClick={() => { setPidiendoBaja("anular"); setMotivo(""); }} disabled={procesando}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+              title="Anular la orden y devolver al stock lo que se había recibido">
+              Anular OC
+            </button>
           )}
           {puedeRecibir && (
             <Link href={`/compras/desde-orden/${encodeURIComponent(cab.numero_oc)}`}
@@ -120,6 +166,41 @@ export default function OrdenCompraDetallePage() {
 
       {msg && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</p>}
       {err && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
+
+      {pidiendoBaja && (
+        <div className="rounded-xl border-2 border-red-200 bg-red-50/60 p-4">
+          <h2 className="text-sm font-bold text-red-800">
+            {pidiendoBaja === "cancelar" ? `Cancelar la orden ${cab.numero_oc}` : `Anular la orden ${cab.numero_oc}`}
+          </h2>
+          <p className="mt-1 text-xs text-red-700">
+            {pidiendoBaja === "cancelar"
+              ? "La orden deja de poder recibirse. No hay mercadería recibida para devolver."
+              : "Esta orden ya tiene mercadería recibida: se devuelve el stock ingresado y se crean los contra-movimientos en Inventario. Las compras vinculadas quedan anuladas."}
+            {" "}No se puede deshacer.
+          </p>
+          <label className="mt-3 block">
+            <span className="text-xs font-medium text-slate-700">Motivo (opcional)</span>
+            <textarea
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              rows={2}
+              disabled={procesando}
+              placeholder="Ej: el proveedor no cumplió, error de carga, devolución…"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-200"
+            />
+          </label>
+          <div className="mt-3 flex justify-end gap-2">
+            <button type="button" onClick={() => setPidiendoBaja(null)} disabled={procesando}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+              Volver
+            </button>
+            <button type="button" onClick={() => void confirmarBaja()} disabled={procesando}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">
+              {procesando ? "Procesando…" : pidiendoBaja === "cancelar" ? "Cancelar OC" : "Anular OC"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {(cab.estado === "recibida_parcial" || cab.estado === "recibida_total") && cab.compra_numero_control && (
         <p className="rounded-lg border border-[#4FAEB2]/30 bg-[#E5F4F4] px-3 py-2 text-sm text-[#3F8E91]">

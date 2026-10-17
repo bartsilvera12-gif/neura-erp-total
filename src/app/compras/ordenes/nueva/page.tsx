@@ -293,6 +293,7 @@ export default function NuevaOrdenCompraPage() {
                       </td>
                       <td className="px-3 py-3">
                         <input type="number" min={0} value={l.cantidad === 0 ? "" : l.cantidad}
+                          onFocus={(e) => e.currentTarget.select()}
                           onChange={(e) => updateLinea(l.producto_id, { cantidad: Math.max(0, parseInt(e.target.value) || 0) })}
                           onBlur={(e) => { if (!e.target.value || Number(e.target.value) < 1) updateLinea(l.producto_id, { cantidad: 1 }); }}
                           className="mx-auto h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums" />
@@ -302,6 +303,7 @@ export default function NuevaOrdenCompraPage() {
                             podia borrar —el cero volvia solo— y todo lo que se
                             escribia quedaba detras, como "030000". */}
                         <input type="number" min={0} value={l.costo_input === 0 ? "" : l.costo_input}
+                          onFocus={(e) => e.currentTarget.select()}
                           onChange={(e) => updateLinea(l.producto_id, { costo_input: Math.max(0, Number(e.target.value) || 0) })}
                           onBlur={(e) => { if (!e.target.value) updateLinea(l.producto_id, { costo_input: 0 }); }}
                           className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums" />

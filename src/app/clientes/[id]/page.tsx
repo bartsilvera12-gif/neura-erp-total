@@ -76,13 +76,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ── Tipos de pestaña ──────────────────────────────────────────────────────────
 
-type TabId = "informacion" | "compras" | "estado_cuenta" | "actividad" | "notas";
+type TabId = "informacion" | "compras" | "estado_cuenta" | "notas";
 
 const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] = [
   { id: "informacion",   label: "Información"      },
   { id: "compras",       label: "Compras"         },
   { id: "estado_cuenta", label: "Estado de cuenta" },
-  { id: "actividad",     label: "Actividad"         },
   { id: "notas",         label: "Notas"             },
 ];
 
@@ -121,19 +120,6 @@ const COMPRA_ESTADO_LABEL: Record<CompraCliente["estado"], { label: string; cls:
   devuelta_total:         { label: "Devuelta",   cls: "bg-slate-100 text-slate-600 ring-slate-200" },
   anulada:                { label: "Anulada",    cls: "bg-rose-50 text-rose-700 ring-rose-200" },
 };
-
-// ── Placeholder para pestañas futuras ─────────────────────────────────────────
-
-function PlaceholderTab({ icon, title, desc }: { icon: string; title: string; desc: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <span className="text-5xl mb-4">{icon}</span>
-      <h3 className="text-base font-semibold text-gray-600 mb-2">{title}</h3>
-      <p className="text-sm text-gray-400 max-w-xs">{desc}</p>
-      <span className="mt-5 text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full">Próximamente</span>
-    </div>
-  );
-}
 
 function ClienteFichaSkeleton() {
   const bar = "animate-pulse rounded-md bg-slate-200/90";
@@ -2254,15 +2240,6 @@ export default function ClienteDetailPage() {
                 </div>
               )}
             </div>
-          )}
-
-          {/* ── SUSCRIPCIONES ────────────────────────────────────────────── */}
-          {activeTab === "actividad" && (
-            <PlaceholderTab
-              icon="🕐"
-              title="Actividad"
-              desc="Timeline completo de interacciones, cambios de estado, ventas y eventos del cliente."
-            />
           )}
 
           {/* ── NOTAS ───────────────────────────────────────────────────── */}

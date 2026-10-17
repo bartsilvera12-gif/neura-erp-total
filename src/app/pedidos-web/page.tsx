@@ -16,6 +16,7 @@ import {
   Search,
   X,
   Boxes,
+  Ban,
 } from "lucide-react";
 import StatCard from "@/components/ui/StatCard";
 
@@ -76,6 +77,13 @@ const COLUMNAS = [
     icono: Check,
     punto: "bg-emerald-400",
     filo: "border-l-emerald-300",
+  },
+  {
+    id: "cancelado",
+    titulo: "Cancelados",
+    icono: Ban,
+    punto: "bg-rose-400",
+    filo: "border-l-rose-300",
   },
 ] as const;
 
@@ -177,14 +185,14 @@ export default function PedidosWebPage() {
    * caen en la primera columna: todavía no los tocó nadie.
    */
   const porColumna = useMemo(() => {
-    const mapa: Record<string, Pedido[]> = { preparando: [], listo: [], entregado: [] };
+    const mapa: Record<string, Pedido[]> = { preparando: [], listo: [], entregado: [], cancelado: [] };
     for (const p of filtrados) {
-      if (p.estado_envio === "cancelado") continue;
       const col = ORDEN.includes(p.estado_envio) ? p.estado_envio : "preparando";
       mapa[col].push(p);
     }
-    // Los entregados no se acumulan para siempre: los últimos 20 alcanzan.
+    // Entregados y cancelados no se acumulan para siempre: los últimos 20 alcanzan.
     mapa.entregado = mapa.entregado.slice(0, 20);
+    mapa.cancelado = mapa.cancelado.slice(0, 20);
     return mapa;
   }, [filtrados]);
 
@@ -336,7 +344,7 @@ export default function PedidosWebPage() {
             Todavía no entró ningún pedido por la tienda.
           </p>
         ) : (
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
             {COLUMNAS.map((col) => {
               const Icono = col.icono;
               const lista = porColumna[col.id] ?? [];

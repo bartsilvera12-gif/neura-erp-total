@@ -642,7 +642,10 @@ function AnularCompraModal({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
+      // fetchWithSupabaseSession: manda el token de la sesión además de la
+      // cookie. Con fetch pelado, una sesión vencida devolvía la pantalla de
+      // login (que no es JSON) y el modal se quedaba sin decir nada.
+      const res = await fetchWithSupabaseSession(
         `/api/compras/${encodeURIComponent(numero_control)}/anular`,
         {
           method: "POST",
@@ -650,8 +653,12 @@ function AnularCompraModal({
           body: JSON.stringify({ motivo: motivo.trim() || null }),
         }
       );
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error ?? `Error ${res.status}`);
+      const json = (await res.json().catch(() => null)) as { success?: boolean; error?: unknown } | null;
+      if (!res.ok || json?.success === false) {
+        if (res.status === 401) throw new Error("Tu sesión venció. Entrá de nuevo y repetí la operación.");
+        const detalle = typeof json?.error === "string" ? json.error : null;
+        throw new Error(detalle ?? `No se pudo completar (error ${res.status}).`);
+      }
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo anular la compra.");
@@ -736,7 +743,10 @@ function AnularOcInlineModal({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
+      // fetchWithSupabaseSession: manda el token de la sesión además de la
+      // cookie. Con fetch pelado, una sesión vencida devolvía la pantalla de
+      // login (que no es JSON) y el modal se quedaba sin decir nada.
+      const res = await fetchWithSupabaseSession(
         `/api/ordenes-compra/${encodeURIComponent(numero_oc)}/anular`,
         {
           method: "POST",
@@ -744,8 +754,12 @@ function AnularOcInlineModal({
           body: JSON.stringify({ motivo: motivo.trim() || null }),
         }
       );
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error ?? `Error ${res.status}`);
+      const json = (await res.json().catch(() => null)) as { success?: boolean; error?: unknown } | null;
+      if (!res.ok || json?.success === false) {
+        if (res.status === 401) throw new Error("Tu sesión venció. Entrá de nuevo y repetí la operación.");
+        const detalle = typeof json?.error === "string" ? json.error : null;
+        throw new Error(detalle ?? `No se pudo completar (error ${res.status}).`);
+      }
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo anular.");
