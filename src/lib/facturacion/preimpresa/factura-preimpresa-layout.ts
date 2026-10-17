@@ -6,11 +6,14 @@
  * verticales (Original / Duplicado / Triplicado). El sistema imprime ÚNICAMENTE
  * los datos variables, posicionados en mm sobre cada copia.
  *
- * TODAS las medidas viven en `CALIB` (abajo) para calibrar en un solo lugar.
- * Los offsets iniciales se derivaron de TOTAL.pdf (216×330 mm exactos):
- *   · columnas y filas detectadas sobre la grilla real (líneas de la plantilla);
- *   · separación entre copias medida sobre el ancla "Nº 001-001" (y = 26.8 /
- *     132.6 / 239.6 mm → deltas 105.8 y 212.8 mm).
+ * OJO: las medidas de `CALIB` NO son de Total. Vienen del clon de Asunhome,
+ * medidas sobre ASUNHOME.pdf; al clonar se cambió el nombre en los comentarios
+ * pero no se volvió a medir nada. Por eso lo impreso cae fuera de lugar, y por
+ * eso el botón está apagado en Ventas (PREIMPRESA_LISTA en src/app/ventas/page.tsx).
+ *
+ * Para encenderlo hace falta: un formulario preimpreso de Total escaneado,
+ * rehacer los X/Y de abajo sobre esa plantilla y una prueba de impresión en
+ * papel real. Todas las medidas viven acá, en un solo lugar.
  *
  * Esto es SOLO maquetación/alineación: no toca venta, stock, caja, numeración
  * ni impuestos.

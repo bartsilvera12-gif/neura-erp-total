@@ -14,6 +14,21 @@ import DevolucionWizard from "@/components/devoluciones/DevolucionWizard";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
+/**
+ * Factura preimpresa: APAGADA.
+ *
+ * La maquetación (las posiciones en milímetros de cada dato sobre la hoja)
+ * vino del clon de Asunhome y nunca se midió contra el talonario de Total:
+ * son las coordenadas del formulario de otra empresa, solo con el nombre
+ * cambiado en los comentarios. Por eso lo impreso cae donde no va.
+ *
+ * Imprimir así no es solo feo: el flujo toma un número del talonario físico,
+ * y una hoja fiscal mal impresa se pierde. Se enciende de nuevo —cambiando
+ * este valor a true— cuando haya un formulario de Total escaneado, las
+ * medidas rehechas y una prueba de impresión sobre papel real.
+ */
+const PREIMPRESA_LISTA = false;
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatGs(valor: number) {
@@ -249,7 +264,7 @@ export default function VentasPage() {
         </div>
 
         {/* Aviso: mantener la numeración del sistema igual al talonario físico. */}
-        {avisoNumeracion && (
+        {PREIMPRESA_LISTA && avisoNumeracion && (
           <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
             <span className="text-lg leading-none">💡</span>
             <div className="flex-1 text-xs text-amber-800">
@@ -458,17 +473,19 @@ export default function VentasPage() {
                           >
                             Imprimir
                           </a>
-                          <a
-                            href={`/api/ventas/${v.id}/factura-preimpresa`}
-                            target="_blank"
-                            rel="noopener"
-                            className="inline-flex items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
-                            title="Imprimir sobre la factura preimpresa de TOTAL (solo los datos, 3 copias). Agregá ?calibrar=1 en dev para ver la plantilla de fondo."
-                          >
-                            Factura preimpresa
-                          </a>
+                          {PREIMPRESA_LISTA && (
+                            <a
+                              href={`/api/ventas/${v.id}/factura-preimpresa`}
+                              target="_blank"
+                              rel="noopener"
+                              className="inline-flex items-center justify-center rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                              title="Imprimir sobre la factura preimpresa de TOTAL (solo los datos, 3 copias). Agregá ?calibrar=1 en dev para ver la plantilla de fondo."
+                            >
+                              Factura preimpresa
+                            </a>
+                          )}
                           {/* Reimprimir en hoja nueva: solo si ya tiene número (se imprimió) y no está anulada. */}
-                          {v.numero_factura && !isAnulada && (
+                          {PREIMPRESA_LISTA && v.numero_factura && !isAnulada && (
                             <button
                               type="button"
                               onClick={() => reimprimirNuevaHoja(v)}
