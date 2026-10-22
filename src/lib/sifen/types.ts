@@ -26,6 +26,8 @@ export interface EmpresaSifenConfigDTO {
   establecimiento: string;
   punto_expedicion: string;
   csc: string | null;
+  /** Identificador del CSC en la DNIT ("0001" el primero, "0002" el segundo). Va en el QR. */
+  csc_id: string | null;
   certificado_path: string | null;
   certificado_vencimiento: string | null;
   activo: boolean;
@@ -62,6 +64,8 @@ export interface EmpresaSifenConfigCreateBody {
   punto_expedicion: string;
   ambiente: AmbienteSifen;
   csc?: string | null;
+  /** IdCSC del QR; "0001" si no se indica. */
+  csc_id?: string | null;
   certificado_path?: string | null;
   certificado_password?: string | null;
   certificado_vencimiento?: string | null;

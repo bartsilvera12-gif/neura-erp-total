@@ -178,11 +178,29 @@ export async function POST(
       return NextResponse.json(errorResponse(m), { status: 400 });
     }
 
+    /**
+     * IdCSC del QR. La DNIT entrega el CSC con un identificador (0001 el primero,
+     * 0002 el segundo) y la SET rehace el hash con el CSC que tiene guardado para
+     * ESE id: si no coincide, rechaza con "el hash del código QR es inválido".
+     * Se lee tolerando que la columna no exista todavía en el schema del tenant.
+     */
+    let idCsc = "0001";
+    {
+      const { data: cscIdRow } = await supabase
+        .from("empresa_sifen_config")
+        .select("csc_id")
+        .eq("empresa_id", auth.empresa_id)
+        .maybeSingle();
+      const v = cscIdRow == null ? "" : String((cscIdRow as { csc_id?: unknown }).csc_id ?? "").trim();
+      if (/^\d{4}$/.test(v)) idCsc = v;
+    }
+
     let signedXml: string;
     try {
       signedXml = signSifenDocumentoXml(xmlDl.data.toString("utf8"), material, {
         ambiente,
         csc: cscParaQr,
+        idCsc,
       });
     } catch (e) {
       const m = e instanceof Error ? e.message : "Error al firmar el XML";
