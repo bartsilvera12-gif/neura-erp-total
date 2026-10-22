@@ -114,6 +114,12 @@ export default function FacturacionElectronicaSifenPage() {
     setLoading(true);
     setError(null);
     try {
+      // Id del CSC: ruta propia (Postgres directo), por la caché de PostgREST.
+      fetchWithSupabaseSession("/api/configuracion/sifen/csc-id")
+        .then((r) => r.json())
+        .then((j) => { if (j?.success) setCscId(String(j.data?.csc_id ?? "0001")); })
+        .catch(() => { /* queda 0001 */ });
+
       // Contacto del emisor (otra tabla, otra ruta): si falla, no rompe la pantalla.
       fetchWithSupabaseSession("/api/configuracion/emisor-contacto")
         .then((r) => r.json())
@@ -144,7 +150,6 @@ export default function FacturacionElectronicaSifenPage() {
         setEstablecimiento(d.establecimiento);
         setPuntoExpedicion(d.punto_expedicion);
         setCsc(d.csc ?? "");
-        setCscId(d.csc_id ?? "0001");
         setActivo(d.activo);
         setPlazoCancelacionHoras(
           typeof d.sifen_plazo_cancelacion_horas === "number" && Number.isFinite(d.sifen_plazo_cancelacion_horas)
@@ -225,7 +230,6 @@ export default function FacturacionElectronicaSifenPage() {
           establecimiento: establecimiento.trim(),
           punto_expedicion: puntoExpedicion.trim(),
           csc: csc.trim() || null,
-          csc_id: cscId,
           activo,
           sifen_plazo_cancelacion_horas: Math.min(8760, Math.max(1, Math.floor(Number(plazoCancelacionHoras)) || 48)),
         };
@@ -259,7 +263,6 @@ export default function FacturacionElectronicaSifenPage() {
           establecimiento: establecimiento.trim(),
           punto_expedicion: puntoExpedicion.trim(),
           csc: csc.trim() || null,
-          csc_id: cscId,
           activo,
           certificado_vencimiento: venc,
           sifen_plazo_cancelacion_horas: Math.min(8760, Math.max(1, Math.floor(Number(plazoCancelacionHoras)) || 48)),
@@ -283,6 +286,17 @@ export default function FacturacionElectronicaSifenPage() {
         setSuccess("Cambios guardados.");
         if (j.data != null && isSifenConfigCompleta(j.data)) setEditarFormulario(false);
       }
+      const resCsc = await fetchWithSupabaseSession("/api/configuracion/sifen/csc-id", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csc_id: cscId }),
+      });
+      const jCsc = (await resCsc.json().catch(() => null)) as { success?: boolean; error?: string } | null;
+      if (!resCsc.ok || jCsc?.success === false) {
+        setError(jCsc?.error ?? "No se pudo guardar el Id del CSC.");
+        return;
+      }
+
       // Teléfono y correo del emisor van a `empresas`, así que es otra llamada.
       const resC = await fetchWithSupabaseSession("/api/configuracion/emisor-contacto", {
         method: "PATCH",
@@ -1024,7 +1038,6 @@ export default function FacturacionElectronicaSifenPage() {
                   setEstablecimiento(cfg.establecimiento);
                   setPuntoExpedicion(cfg.punto_expedicion);
                   setCsc(cfg.csc ?? "");
-                  setCscId(cfg.csc_id ?? "0001");
                   setActivo(cfg.activo);
                   setCertVenc(isoToDateInput(cfg.certificado_vencimiento));
                 }

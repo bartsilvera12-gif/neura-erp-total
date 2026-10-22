@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getFacturasSupabaseFromAuth } from "@/lib/facturacion/facturas-service-client";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
@@ -185,14 +188,20 @@ export async function POST(
      * Se lee tolerando que la columna no exista todavía en el schema del tenant.
      */
     let idCsc = "0001";
-    {
-      const { data: cscIdRow } = await supabase
-        .from("empresa_sifen_config")
-        .select("csc_id")
-        .eq("empresa_id", auth.empresa_id)
-        .maybeSingle();
-      const v = cscIdRow == null ? "" : String((cscIdRow as { csc_id?: unknown }).csc_id ?? "").trim();
-      if (/^\d{4}$/.test(v)) idCsc = v;
+    try {
+      const pool = getChatPostgresPool();
+      if (pool) {
+        const schemaCfg = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(auth.empresa_id));
+        const tCfg = quoteSchemaTable(schemaCfg, "empresa_sifen_config");
+        const { rows } = await pool.query<{ csc_id: string | null }>(
+          `SELECT csc_id FROM ${tCfg} WHERE empresa_id = $1::uuid LIMIT 1`,
+          [auth.empresa_id]
+        );
+        const v = String(rows[0]?.csc_id ?? "").trim();
+        if (/^\d{4}$/.test(v)) idCsc = v;
+      }
+    } catch {
+      /* sin la columna todavía: queda 0001, como venía */
     }
 
     let signedXml: string;

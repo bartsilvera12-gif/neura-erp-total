@@ -120,18 +120,6 @@ function parseCertificadoPasswordWire(b: Record<string, unknown>): PasswordWire 
 }
 
 /** Valida y normaliza el body de creación (POST). */
-/**
- * IdCSC del QR: cuatro dígitos ("0001" el primer CSC que entrega la DNIT,
- * "0002" el segundo). La SET rehace el hash del QR con el CSC guardado para
- * ese id, así que un id equivocado se traduce en "hash del QR inválido".
- */
-function normalizarIdCsc(v: unknown): string | null {
-  if (v == null) return null;
-  const d = String(v).replace(/\D/g, "");
-  if (!d) return null;
-  return d.slice(0, 4).padStart(4, "0");
-}
-
 export function validateCreateBody(raw: unknown): EmpresaSifenConfigCreateResult {
   if (raw == null || typeof raw !== "object") {
     return { ok: false, error: "El cuerpo debe ser un objeto JSON" };
@@ -191,7 +179,6 @@ export function validateCreateBody(raw: unknown): EmpresaSifenConfigCreateResult
     punto_expedicion,
     ambiente,
     csc: optionalNullableString(b.csc),
-    csc_id: normalizarIdCsc(b.csc_id),
     certificado_path: optionalNullableString(b.certificado_path),
     certificado_password,
     certificado_vencimiento,
@@ -300,7 +287,6 @@ export function buildPatchUpdate(raw: unknown): EmpresaSifenConfigPatchResult {
     patch.ambiente = a;
   }
   if ("csc" in b) patch.csc = b.csc === null ? null : trimStr(b.csc) || null;
-  if ("csc_id" in b) patch.csc_id = normalizarIdCsc(b.csc_id);
   if ("certificado_path" in b) {
     patch.certificado_path = b.certificado_path === null ? null : trimStr(b.certificado_path) || null;
   }
