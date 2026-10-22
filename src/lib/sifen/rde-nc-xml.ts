@@ -244,7 +244,9 @@ export function buildOfficialRdeNotaCreditoElectronicaXml(
     gEmisParts.push(textEl("dDesCiuEmi", "ASUNCION (DISTRITO)"));
   }
   gEmisParts.push(textEl("dTelEmi", telEmi));
-  gEmisParts.push(textEl("dEmailE", opts.emisorEmail.trim()));
+  // dEmailE es opcional y un elemento vacío lo rechaza la SET: solo va si hay correo.
+  const emailEmi = opts.emisorEmail.trim();
+  if (emailEmi) gEmisParts.push(textEl("dEmailE", emailEmi));
   gEmisParts.push("<gActEco>");
   gEmisParts.push(textEl("cActEco", cAct));
   gEmisParts.push(textEl("dDesActEco", dActDes));

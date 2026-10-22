@@ -1,4 +1,5 @@
 import { getEmisorDatos } from "@/lib/documentos/emisor";
+import { telefonoEmisor, emailEmisor } from "@/lib/sifen/emisor-contacto";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { NextResponse } from "next/server";
 import type { UsuarioConEmpresaYRol } from "@/lib/middleware/auth";
@@ -131,8 +132,8 @@ export async function handleNcSifenXmlPost(opts: {
     timbradoFechaInicio: loaded.payload.emisor.timbrado_fecha_inicio_vigencia,
     timbradoFechaFin: `${yAnio}-12-31`,
     ambiente: loaded.ambiente,
-    emisorTelefono: emisorDatos.telefono,
-    emisorEmail: emisorDatos.email,
+    emisorTelefono: telefonoEmisor(emisorDatos.telefono),
+    emisorEmail: emailEmisor(emisorDatos.email),
     emisorDireccion: loaded.payload.emisor.direccion_fiscal.trim(),
     emisorNumCasa: 0,
     actividadEconomicaCodigo: loaded.payload.emisor.actividad_economica_codigo,
