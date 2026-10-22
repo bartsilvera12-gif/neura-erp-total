@@ -69,6 +69,9 @@ export default function FacturacionElectronicaSifenPage() {
   const [ruc, setRuc] = useState("");
   const [razonSocial, setRazonSocial] = useState("");
   const [direccionFiscal, setDireccionFiscal] = useState("");
+  /** Contacto del emisor: vive en `empresas`, no en la config SIFEN, pero el XML lo exige. */
+  const [emisorTelefono, setEmisorTelefono] = useState("");
+  const [emisorEmail, setEmisorEmail] = useState("");
   const [timbradoNumero, setTimbradoNumero] = useState("");
   const [timbradoFechaIni, setTimbradoFechaIni] = useState("");
   const [actEcoCodigo, setActEcoCodigo] = useState("");
@@ -109,6 +112,16 @@ export default function FacturacionElectronicaSifenPage() {
     setLoading(true);
     setError(null);
     try {
+      // Contacto del emisor (otra tabla, otra ruta): si falla, no rompe la pantalla.
+      fetchWithSupabaseSession("/api/configuracion/emisor-contacto")
+        .then((r) => r.json())
+        .then((jc) => {
+          if (!jc?.success) return;
+          setEmisorTelefono(String(jc.data?.telefono ?? ""));
+          setEmisorEmail(String(jc.data?.email ?? ""));
+        })
+        .catch(() => { /* se muestra vacío y se puede cargar igual */ });
+
       const res = await fetchWithSupabaseSession("/api/configuracion/sifen");
       const j = (await res.json()) as { success?: boolean; data?: EmpresaSifenConfigDTO | null; error?: string };
       if (!res.ok || !j.success) {
@@ -265,6 +278,18 @@ export default function FacturacionElectronicaSifenPage() {
         setSuccess("Cambios guardados.");
         if (j.data != null && isSifenConfigCompleta(j.data)) setEditarFormulario(false);
       }
+      // Teléfono y correo del emisor van a `empresas`, así que es otra llamada.
+      const resC = await fetchWithSupabaseSession("/api/configuracion/emisor-contacto", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefono: emisorTelefono, email: emisorEmail }),
+      });
+      const jc = (await resC.json().catch(() => null)) as { success?: boolean; error?: string } | null;
+      if (!resC.ok || jc?.success === false) {
+        setError(jc?.error ?? "No se pudieron guardar el teléfono y el correo del emisor.");
+        return;
+      }
+
       await load();
     } catch {
       setError("Error de red");
@@ -504,6 +529,18 @@ export default function FacturacionElectronicaSifenPage() {
                 <span className="font-medium">{cfg.direccion_fiscal ?? "—"}</span>
               </li>
               <li>
+                <span className="text-slate-500">Teléfono (dTelEmi):</span>{" "}
+                {emisorTelefono ? (
+                  <span className="font-mono font-medium">{emisorTelefono}</span>
+                ) : (
+                  <span className="font-medium text-red-700">falta — sin esto SET rechaza la factura</span>
+                )}
+              </li>
+              <li>
+                <span className="text-slate-500">Correo (dEmailE):</span>{" "}
+                <span className="font-medium">{emisorEmail || "—"}</span>
+              </li>
+              <li>
                 <span className="text-slate-500">Inicio vigencia timbrado (dFeIniT):</span>{" "}
                 <span className="font-mono font-medium">{cfg.timbrado_fecha_inicio_vigencia ?? "—"}</span>
               </li>
@@ -638,6 +675,33 @@ export default function FacturacionElectronicaSifenPage() {
               />
               <p className="text-xs text-slate-500 mt-1.5">
                 Va al XML SIFEN como <span className="font-mono">dDirEmi</span>. No uses la razón social aquí.
+              </p>
+            </div>
+            <div>
+              <label className={fLabel}>Teléfono de la empresa</label>
+              <input
+                className={fInput}
+                value={emisorTelefono}
+                onChange={(e) => setEmisorTelefono(e.target.value.replace(/\D/g, "").slice(0, 15))}
+                inputMode="numeric"
+                placeholder="Ej: 0981123456"
+              />
+              <p className="text-xs text-slate-500 mt-1.5">
+                Va al XML como <span className="font-mono">dTelEmi</span>. Solo dígitos, entre 8 y 15. Sin esto, SET
+                rechaza la factura.
+              </p>
+            </div>
+            <div>
+              <label className={fLabel}>Correo de la empresa</label>
+              <input
+                className={fInput}
+                value={emisorEmail}
+                onChange={(e) => setEmisorEmail(e.target.value)}
+                type="email"
+                placeholder="Ej: ventas@totalelectrodomesticos.com"
+              />
+              <p className="text-xs text-slate-500 mt-1.5">
+                Va al XML como <span className="font-mono">dEmailE</span>.
               </p>
             </div>
             <div>

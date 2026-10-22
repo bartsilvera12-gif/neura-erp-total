@@ -158,7 +158,17 @@ export async function POST(
       });
     } catch (e) {
       await revertBumpRegSeq();
-      const msg = e instanceof Error ? e.message : "Error al generar XML SIFEN";
+      const bruto = e instanceof Error ? e.message : "Error al generar XML SIFEN";
+      // Los errores de datos del emisor salían con el nombre del campo del XML
+      // ("emisorTelefono debe tener entre 8 y 15 dígitos"), que no le dice a
+      // nadie dónde se carga eso. Se traducen al lugar de la pantalla.
+      const msg = /emisorTelefono/i.test(bruto)
+        ? "Falta el teléfono de la empresa (entre 8 y 15 dígitos). Cargalo en Configuración → Facturación electrónica."
+        : /emisorEmail/i.test(bruto)
+          ? "Falta el correo de la empresa. Cargalo en Configuración → Facturación electrónica."
+          : /emisorDireccion|dDirEmi/i.test(bruto)
+            ? "Falta la dirección fiscal de la empresa. Cargala en Configuración → Facturación electrónica."
+            : bruto;
       return NextResponse.json(errorResponse(msg), { status: 400 });
     }
 

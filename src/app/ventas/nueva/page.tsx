@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Minus, Trash2, ImageIcon, ChevronDown } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
@@ -194,6 +194,8 @@ export default function NuevaVentaPage() {
   // Cliente (opcional). Si se selecciona, se envía cliente_id al crear la venta.
   type ClienteLite = { id: string; label: string; ruc: string | null; telefono: string | null; usa_nota_remision: boolean };
   const [clientes, setClientes] = useState<ClienteLite[]>([]);
+  /** Primeros clientes por orden alfabético: lo que se ve al abrir el selector, sin escribir nada. */
+  const [clientesIniciales, setClientesIniciales] = useState<ClienteLite[]>([]);
   const [clienteId, setClienteId] = useState("");
   // Vendedor acreditado para comisión (default: usuario logueado si es vendedor).
   type VendedorLite = { id: string; nombre: string; email: string; porcentaje_comision: number };
@@ -510,10 +512,37 @@ export default function NuevaVentaPage() {
     return () => { cancelled = true; };
   }, []);
 
+  /** Filas de /api/clientes → lo mínimo que muestra el selector. */
+  const mapearClientes = useCallback((filas: unknown): ClienteLite[] => {
+    if (!Array.isArray(filas)) return [];
+    const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    return (filas as Record<string, unknown>[]).map((r) => ({
+      id: String(r.id),
+      label: s(r.empresa) || s(r.nombre_contacto) || s(r.nombre) || "Cliente",
+      ruc: s(r.ruc) || s(r.documento) || null,
+      telefono: s(r.telefono) || null,
+      usa_nota_remision: r.usa_nota_remision === true,
+    }));
+  }, []);
+
+  // Lista para elegir sin escribir: los primeros 50 por orden alfabético. Antes
+  // el desplegable exigía tipear 2 letras, así que no había forma de ver quiénes
+  // eran los clientes; había que acordarse del nombre.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/clientes?lite=1&limit=50", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        setClientesIniciales(mapearClientes(j.data));
+      })
+      .catch(() => { /* el selector sigue andando a fuerza de búsqueda */ });
+    return () => { cancelled = true; };
+  }, [mapearClientes]);
+
   // Buscador de cliente (typeahead server-side). Consulta /api/clientes?q=… con
   // debounce y trae SOLO las coincidencias (por nombre, cédula/RUC o teléfono),
-  // así escala a miles de clientes sin cargarlos todos. Con <2 letras no busca y
-  // conserva lo que haya (para no perder el cliente ya seleccionado).
+  // así escala a miles de clientes sin cargarlos todos.
   useEffect(() => {
     const term = clienteQuery.trim();
     if (term.length < 2) return;
@@ -522,21 +551,13 @@ export default function NuevaVentaPage() {
       fetch(`/api/clientes?q=${encodeURIComponent(term)}&limit=25`, { credentials: "include", cache: "no-store" })
         .then((r) => r.json())
         .then((j) => {
-          if (cancelled || !j?.success || !Array.isArray(j.data)) return;
-          const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-          const lite: ClienteLite[] = (j.data as Record<string, unknown>[]).map((r) => ({
-            id: String(r.id),
-            label: s(r.empresa) || s(r.nombre_contacto) || s(r.nombre) || "Cliente",
-            ruc: s(r.ruc) || s(r.documento) || null,
-            telefono: s(r.telefono) || null,
-            usa_nota_remision: r.usa_nota_remision === true,
-          }));
-          setClientes(lite);
+          if (cancelled || !j?.success) return;
+          setClientes(mapearClientes(j.data));
         })
         .catch(() => { /* el buscador de cliente es opcional, no bloquea la venta */ });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [clienteQuery]);
+  }, [clienteQuery, mapearClientes]);
 
   // Cargar vendedores + preseleccionar al usuario logueado si es vendedor.
   useEffect(() => {
@@ -723,7 +744,10 @@ export default function NuevaVentaPage() {
   // El servidor ya filtró por nombre/cédula/RUC/teléfono (typeahead): acá solo se
   // muestran los resultados (sin re-filtrar por label, que ocultaría coincidencias
   // por cédula). Con <2 letras no se muestra nada viejo (se pide escribir).
-  const clientesFiltrados = clienteQuery.trim().length < 2 ? [] : clientes.slice(0, 50);
+  // Sin escribir: la lista alfabética. Con 2+ letras: lo que devolvió la búsqueda.
+  const clientesFiltrados = clienteQuery.trim().length < 2
+    ? clientesIniciales.slice(0, 50)
+    : clientes.slice(0, 50);
 
   // Cobro: entidad seleccionada + filtrado por código/nombre (tokens).
   const entidadSel = entidades.find((e) => e.id === pagoEntidadId) ?? null;
@@ -1111,7 +1135,7 @@ export default function NuevaVentaPage() {
                   {clientesFiltrados.length === 0 ? (
                     <p className="px-3 py-2 text-xs text-gray-400">
                       {clienteQuery.trim().length < 2
-                        ? "Escribí al menos 2 letras (nombre o cédula)…"
+                        ? "Todavía no hay clientes cargados."
                         : `Sin clientes que coincidan con "${clienteQuery.trim()}".`}
                     </p>
                   ) : (

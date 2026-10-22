@@ -177,6 +177,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(successResponse(data ?? []));
     }
 
+    // ── Listado liviano para el selector (?lite=1, sin q) ───────────────────
+    // El selector de cliente de Ventas necesita poder MOSTRAR clientes sin que
+    // el usuario tenga que adivinar las primeras letras. Devuelve los mismos
+    // campos mínimos que la búsqueda, ordenados por nombre y con límite, sin
+    // los enriquecimientos pesados del listado de Clientes.
+    if (sp.get("lite") === "1") {
+      const limit = Math.min(Math.max(Number(sp.get("limit")) || 50, 1), 100);
+      const { data, error } = await supabase
+        .from("clientes")
+        .select("id, empresa, nombre_contacto, nombre, ruc, documento, telefono, direccion, usa_nota_remision")
+        .eq("empresa_id", auth.empresa_id)
+        .is("deleted_at", null)
+        .order("nombre", { ascending: true })
+        .limit(limit);
+      if (error) {
+        return NextResponse.json(errorResponse(error.message), { status: 400 });
+      }
+      return NextResponse.json(successResponse(data ?? []));
+    }
+
     let q = supabase
       .from("clientes")
       .select("*")
