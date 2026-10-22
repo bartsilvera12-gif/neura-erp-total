@@ -162,21 +162,43 @@ export async function cambiarProductoVenta(
     const obs = `Cambio de producto en ${numeroControl}`;
     const nuevoBase = p.nuevaCantidad; // sin presentaciones (producto simple)
 
-    // 5) STOCK: reintegrar el viejo, descontar el nuevo (movimientos de ajuste).
+    /**
+     * 5) STOCK: vuelve el producto viejo y sale el nuevo.
+     *
+     * La SALIDA original de la venta se marca como ANULADA y la del producto
+     * nuevo se registra con origen 'venta'. Antes el reemplazo quedaba como dos
+     * ajustes manuales y la salida original seguía vigente apuntando al producto
+     * viejo; como anular una venta revierte las salidas con origen 'venta', al
+     * anular se devolvía al stock el producto que ya no estaba en la venta
+     * (pasó con VTA-000002: volvieron 2 del producto viejo y faltaron 2 del que
+     * realmente se había vendido).
+     *
+     * Si la venta no tuviera una salida 'venta' viva —ventas viejas, productos
+     * sin control de stock— se deja el ENTRADA de ajuste como rastro.
+     */
     if (viejo && viejo.controla_stock !== false && viejoBase > 0) {
       await client.query(`UPDATE ${tProd} SET stock_actual = stock_actual + $2::numeric, updated_at=now() WHERE id=$1::uuid`, [viejoProductoId, viejoBase]);
-      await client.query(
-        `INSERT INTO ${tMov} (empresa_id, producto_id, producto_nombre, producto_sku, tipo, cantidad, costo_unitario, origen, referencia, fecha, venta_id, created_by, usuario_nombre, observaciones)
-         VALUES ($1::uuid,$2::uuid,$3,$4,'ENTRADA',$5::numeric,$6::numeric,'ajuste_manual',$7,now(),$8::uuid,$9,$10,$11)`,
-        [empresaId, viejoProductoId, String(viejo.nombre ?? ""), String(viejo.sku ?? ""), viejoBase, num(viejo.costo_promedio), ref, ventaId, p.createdBy ?? null, p.usuarioNombre ?? null, obs]
+      const anuladas = await client.query(
+        `UPDATE ${tMov}
+            SET anulado_at = now(), anulado_por = $1::uuid
+          WHERE empresa_id = $2::uuid AND venta_id = $3::uuid AND producto_id = $4::uuid
+            AND tipo = 'SALIDA' AND COALESCE(origen,'venta') = 'venta' AND anulado_at IS NULL`,
+        [p.createdBy ?? null, empresaId, ventaId, viejoProductoId]
       );
+      if ((anuladas.rowCount ?? 0) === 0) {
+        await client.query(
+          `INSERT INTO ${tMov} (empresa_id, producto_id, producto_nombre, producto_sku, tipo, cantidad, costo_unitario, origen, referencia, fecha, venta_id, created_by, usuario_nombre, observaciones)
+           VALUES ($1::uuid,$2::uuid,$3,$4,'ENTRADA',$5::numeric,$6::numeric,'ajuste_manual',$7,now(),$8::uuid,$9,$10,$11)`,
+          [empresaId, viejoProductoId, String(viejo.nombre ?? ""), String(viejo.sku ?? ""), viejoBase, num(viejo.costo_promedio), ref, ventaId, p.createdBy ?? null, p.usuarioNombre ?? null, obs]
+        );
+      }
     }
     if (nuevo.controla_stock !== false && nuevoBase > 0) {
       await client.query(`UPDATE ${tProd} SET stock_actual = GREATEST(0, stock_actual - $2::numeric), updated_at=now() WHERE id=$1::uuid`, [p.nuevoProductoId, nuevoBase]);
       await client.query(
         `INSERT INTO ${tMov} (empresa_id, producto_id, producto_nombre, producto_sku, tipo, cantidad, costo_unitario, origen, referencia, fecha, venta_id, created_by, usuario_nombre, observaciones)
-         VALUES ($1::uuid,$2::uuid,$3,$4,'SALIDA',$5::numeric,$6::numeric,'ajuste_manual',$7,now(),$8::uuid,$9,$10,$11)`,
-        [empresaId, p.nuevoProductoId, String(nuevo.nombre ?? ""), String(nuevo.sku ?? ""), nuevoBase, num(nuevo.costo_promedio), ref, ventaId, p.createdBy ?? null, p.usuarioNombre ?? null, obs]
+         VALUES ($1::uuid,$2::uuid,$3,$4,'SALIDA',$5::numeric,$6::numeric,'venta',$7,now(),$8::uuid,$9,$10,$11)`,
+        [empresaId, p.nuevoProductoId, String(nuevo.nombre ?? ""), String(nuevo.sku ?? ""), nuevoBase, num(nuevo.costo_promedio), numeroControl, ventaId, p.createdBy ?? null, p.usuarioNombre ?? null, obs]
       );
     }
 
