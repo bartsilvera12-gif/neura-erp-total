@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import Link from "next/link";
 import { getOrdenesCompra, deleteOrdenCompra } from "@/lib/ordenes-compra/storage";
@@ -11,12 +12,7 @@ function fmtGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
 }
 function fmtFecha(iso: string) {
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  } catch {
-    return iso;
-  }
+  return formatFechaDdMmAaaa(iso);
 }
 
 const ESTADO_BADGE: Record<EstadoOrdenCompra, string> = {

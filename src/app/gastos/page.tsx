@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getGastos, deleteGasto } from "@/lib/gastos/actions";
@@ -11,16 +12,7 @@ function formatGs(valor: number) {
 }
 
 function formatFecha(fecha: string) {
-  try {
-    const d = new Date(fecha);
-    return d.toLocaleDateString("es-PY", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  } catch {
-    return fecha;
-  }
+  return formatFechaDdMmAaaa(fecha);
 }
 
 const tipoBadge: Record<string, string> = {

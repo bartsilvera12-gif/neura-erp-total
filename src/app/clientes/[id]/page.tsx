@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -88,10 +89,7 @@ const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] =
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatFecha(iso: string) {
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  } catch { return ""; }
+  return formatFechaDdMmAaaa(iso);
 }
 
 function formatFechaHora(iso: string) {

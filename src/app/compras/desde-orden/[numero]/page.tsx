@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -14,12 +15,7 @@ function fmtGs(v: number) {
 }
 function fmtFecha(iso: string | null | undefined) {
   if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  } catch {
-    return iso;
-  }
+  return formatFechaDdMmAaaa(iso);
 }
 const inputClass =
   "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30";

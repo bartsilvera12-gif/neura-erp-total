@@ -653,11 +653,18 @@ function FinMontoGs({
  * - Mensual / suscripción: resto (p. ej. crédito / cuotas vinculadas a suscripción en el producto)
  * Cada factura del período entra en exactamente un bucket (sin doble conteo).
  */
+/**
+ * Composición de lo FACTURADO en el período, por tipo de factura.
+ *
+ * Sumaba `saldo` —lo que falta cobrar— en vez de `monto`. Con todo cobrado la
+ * tarjeta mostraba Gs. 0 aunque hubiera facturación, y cuando mostraba algo
+ * repetía la tarjeta de deuda en vez de la emisión que anuncia su título.
+ */
 function composicionFacturacionPorModalidad(facturasPeriodo: FacturaRaw[]) {
   let contado = 0;
   let mensual = 0;
   for (const f of facturasPeriodo) {
-    const m = Number(f.saldo);
+    const m = Number(f.monto);
     if (!Number.isFinite(m) || m <= 0) continue;
     const t = (f.tipo ?? "").trim().toLowerCase();
     if (t === "contado") contado += m;

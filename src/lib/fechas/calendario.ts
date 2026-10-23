@@ -132,3 +132,34 @@ export function fechaVencimientoSuscripcion(fechaEmisionYmd: string, diaVencimie
   const dV2 = Math.min(Math.max(1, diaVencimiento), dim2);
   return `${ny}-${String(nm).padStart(2, "0")}-${String(dV2).padStart(2, "0")}`;
 }
+
+/**
+ * DD/MM/AAAA para mostrar, sin corrimientos.
+ *
+ * Las fechas "de calendario" (fecha de una compra, de una factura, de un gasto)
+ * se guardan como timestamp a las 00:00 UTC. Formatearlas con la hora local del
+ * navegador las retrocedía un día en Paraguay (00:00 UTC = 21:00 del día
+ * anterior): la factura del 15 figuraba como 14.
+ *
+ * Por eso, cuando la hora es exactamente medianoche UTC, se toma la fecha tal
+ * cual viene. Si el dato tiene hora real —una venta de las 14:20— se formatea
+ * en la zona de Asunción, que es lo que corresponde.
+ */
+export function formatFechaDdMmAaaa(v: string | null | undefined): string {
+  if (v == null || v === "") return "—";
+  const s = String(v).trim();
+
+  const soloFecha = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ]00:00(?::00(?:\.0+)?)?(?:Z|\+00:?00)?)?$/);
+  if (soloFecha) return `${soloFecha[3]}/${soloFecha[2]}/${soloFecha[1]}`;
+
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  const partes = new Intl.DateTimeFormat("es-PY", {
+    timeZone: "America/Asuncion",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(d);
+  const get = (t: string) => partes.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")}/${get("month")}/${get("year")}`;
+}

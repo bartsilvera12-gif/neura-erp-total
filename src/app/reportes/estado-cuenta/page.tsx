@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
@@ -15,12 +16,7 @@ function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
 }
 function formatFecha(iso: string) {
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  } catch {
-    return iso;
-  }
+  return formatFechaDdMmAaaa(iso);
 }
 
 export default function EstadoCuentaReportePage() {

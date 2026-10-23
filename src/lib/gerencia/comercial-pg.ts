@@ -89,6 +89,8 @@ export async function getGerenciaReporte(
   const tV = quoteSchemaTable(schema, "ventas");
   const tVI = quoteSchemaTable(schema, "ventas_items");
   const tCob = quoteSchemaTable(schema, "cobros_clientes");
+  /** Pagos aplicados a facturas: el otro lado de la cobranza. */
+  const tPagosFac = quoteSchemaTable(schema, "pagos");
   const tCxc = quoteSchemaTable(schema, "cuentas_por_cobrar");
   const tCli = quoteSchemaTable(schema, "clientes");
 
@@ -119,12 +121,22 @@ export async function getGerenciaReporte(
           WHERE v.empresa_id = $1::uuid AND ${vivas}
           GROUP BY 1
        ),
+       /*
+        * Lo cobrado sale de dos lados: los cobros de cuentas por cobrar
+        * (ventas a crédito) y los pagos aplicados a facturas. Gerencia miraba
+        * solo el primero y mostraba "cobrado del mes: 0" mientras el dashboard,
+        * que mira los pagos, mostraba el importe real.
+        */
        cobrado AS (
-         SELECT date_trunc('month', c.fecha_pago) AS mes,
-                SUM(c.monto)::float8 AS cobrado
-           FROM ${tCob} c
-          WHERE c.empresa_id = $1::uuid
-          GROUP BY 1
+         SELECT mes, SUM(monto)::float8 AS cobrado FROM (
+           SELECT date_trunc('month', c.fecha_pago) AS mes, c.monto
+             FROM ${tCob} c
+            WHERE c.empresa_id = $1::uuid
+           UNION ALL
+           SELECT date_trunc('month', pf.fecha_pago) AS mes, pf.monto
+             FROM ${tPagosFac} pf
+            WHERE pf.empresa_id = $1::uuid
+         ) x GROUP BY 1
        )
        SELECT to_char(m.mes, 'YYYY-MM')     AS mes,
               COALESCE(ve.facturado, 0)     AS facturado,
@@ -176,7 +188,7 @@ export async function getGerenciaReporte(
 
     // Clientes más grandes del mes.
     q<{ cliente: string; facturado: number; ventas: number }>(
-      `SELECT COALESCE(NULLIF(TRIM(cl.nombre), ''), 'Sin cliente') AS cliente,
+      `SELECT COALESCE(NULLIF(TRIM(cl.empresa), ''), NULLIF(TRIM(cl.nombre_contacto), ''), NULLIF(TRIM(cl.nombre), ''), 'Sin cliente') AS cliente,
               SUM(v.total)::float8 AS facturado,
               count(*)::int        AS ventas
          FROM ${tV} v
@@ -198,7 +210,7 @@ export async function getGerenciaReporte(
       vencimiento: string | null;
       dias_atraso: number | null;
     }>(
-      `SELECT COALESCE(NULLIF(TRIM(cl.nombre), ''), 'Sin cliente') AS cliente,
+      `SELECT COALESCE(NULLIF(TRIM(cl.empresa), ''), NULLIF(TRIM(cl.nombre_contacto), ''), NULLIF(TRIM(cl.nombre), ''), 'Sin cliente') AS cliente,
               c.numero_venta                                      AS numero,
               c.saldo::float8                                     AS saldo,
               c.fecha_vencimiento                                 AS vencimiento,
