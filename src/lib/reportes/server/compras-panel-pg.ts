@@ -15,6 +15,7 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import type {
   ComprasPanel,
   CompraPanelFila,
+  CompraItemFila,
   OrdenPendienteFila,
 } from "@/lib/reportes/types";
 
@@ -65,6 +66,28 @@ export async function getComprasPanel(
     total: num(r.total),
     estado: r.estado != null ? String(r.estado) : "registrada",
     orden_compra_numero: r.orden_compra_numero != null ? String(r.orden_compra_numero) : null,
+  }));
+
+  // ── Vista 1b: el detalle de esas mismas compras, sin agrupar. La tabla
+  //   `compras` ya es plana (una fila por producto), así que el detalle es
+  //   simplemente no agrupar: qué producto entró, cuánto y a qué costo.
+  const itemsQ = await pool().query(
+    `SELECT numero_control, fecha, proveedor_nombre, producto_nombre,
+            cantidad, costo_unitario, total
+       FROM ${tCompras}
+      WHERE empresa_id = $1::uuid AND fecha >= $2 AND fecha <= $3
+        AND anulada_at IS NULL
+      ORDER BY fecha DESC, numero_control DESC, producto_nombre`,
+    [empresaId, rango.start, rango.end]
+  );
+  const items: CompraItemFila[] = itemsQ.rows.map((r: Record<string, unknown>) => ({
+    numero_control: String(r.numero_control),
+    fecha: String(r.fecha),
+    proveedor_nombre: r.proveedor_nombre != null ? String(r.proveedor_nombre) : "—",
+    producto_nombre: r.producto_nombre != null ? String(r.producto_nombre) : "—",
+    cantidad: num(r.cantidad),
+    costo_unitario: num(r.costo_unitario),
+    total: num(r.total),
   }));
 
   // ── Vista 2: ordenados no comprados (líneas de OC con pendiente > 0).
@@ -122,6 +145,7 @@ export async function getComprasPanel(
     desde: rango.desde,
     hasta: rango.hasta,
     compras,
+    items,
     pendientes,
     totales: {
       total_compras: compras.length,

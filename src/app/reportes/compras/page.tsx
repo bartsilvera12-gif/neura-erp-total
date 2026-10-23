@@ -11,7 +11,7 @@ import { getComprasPanel } from "@/lib/reportes/storage";
 import { getCompras } from "@/lib/compras/storage";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
-import type { ComprasPanel } from "@/lib/reportes/types";
+import type { ComprasPanel, CompraItemFila } from "@/lib/reportes/types";
 import type { Compra } from "@/lib/compras/types";
 
 function formatGs(v: number) {
@@ -35,7 +35,7 @@ const ESTADO_OC: Record<string, { lbl: string; cls: string }> = {
   cancelada: { lbl: "Cancelada", cls: "bg-slate-100 text-slate-500" },
 };
 
-type Vista = "compras" | "pendientes";
+type Vista = "compras" | "items" | "pendientes";
 
 export default function ComprasReportePage() {
   const [desde, setDesde] = useState(`${mesActualAsuncion()}-01`);
@@ -78,7 +78,8 @@ export default function ComprasReportePage() {
 
   const proveedores = useMemo(() => {
     if (!data) return [] as string[];
-    const src = vista === "compras" ? data.compras : data.pendientes;
+    const src: { proveedor_nombre: string }[] =
+      vista === "compras" ? data.compras : vista === "items" ? (data.items ?? []) : data.pendientes;
     return [...new Set(src.map((r) => r.proveedor_nombre).filter(Boolean))].sort();
   }, [data, vista]);
 
@@ -90,6 +91,15 @@ export default function ComprasReportePage() {
       return productoMatchesQuery(busqueda, c.numero_control, c.numero_factura, c.proveedor_nombre);
     });
   }, [data, busqueda, filtroProveedor, filtroEstado]);
+
+  // Detalle: qué producto entró, cuándo y a qué costo.
+  const itemsFiltrados = useMemo(() => {
+    if (!data) return [] as CompraItemFila[];
+    return (data.items ?? []).filter((it) => {
+      if (filtroProveedor && it.proveedor_nombre !== filtroProveedor) return false;
+      return productoMatchesQuery(busqueda, it.producto_nombre, it.numero_control, it.proveedor_nombre);
+    });
+  }, [data, busqueda, filtroProveedor]);
 
   const pendientesFiltrados = useMemo(() => {
     if (!data) return [];
@@ -144,6 +154,13 @@ export default function ComprasReportePage() {
         </button>
         <button
           type="button"
+          onClick={() => cambiarVista("items")}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${vista === "items" ? "border-[#4FAEB2] text-[#3F8E91]" : "border-transparent text-slate-500 hover:text-[#3F8E91]"}`}
+        >
+          Detalle por producto{data ? ` (${(data.items ?? []).length})` : ""}
+        </button>
+        <button
+          type="button"
           onClick={() => cambiarVista("pendientes")}
           className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${vista === "pendientes" ? "border-[#4FAEB2] text-[#3F8E91]" : "border-transparent text-slate-500 hover:text-[#3F8E91]"}`}
         >
@@ -155,7 +172,13 @@ export default function ComprasReportePage() {
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
-          placeholder={vista === "compras" ? "Buscar por N° compra, factura o proveedor…" : "Buscar por N° OC, producto, SKU o proveedor…"}
+          placeholder={
+            vista === "compras"
+              ? "Buscar por N° compra, factura o proveedor…"
+              : vista === "items"
+                ? "Buscar por producto, N° compra o proveedor…"
+                : "Buscar por N° OC, producto, SKU o proveedor…"
+          }
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 sm:min-w-72"
@@ -191,6 +214,8 @@ export default function ComprasReportePage() {
         </div>
       ) : vista === "compras" ? (
         <VistaCompras filas={comprasFiltradas} onVer={abrirDetalle} />
+      ) : vista === "items" ? (
+        <VistaItems filas={itemsFiltrados} />
       ) : (
         <VistaPendientes filas={pendientesFiltrados} />
       )}
@@ -378,6 +403,63 @@ function VistaPendientes({ filas }: { filas: ComprasPanel["pendientes"] }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Detalle de las compras del período, línea por línea. El panel mostraba solo
+ * cabeceras (proveedor, total, cuántos ítems), así que para saber QUÉ se compró
+ * había que abrir compra por compra.
+ */
+function VistaItems({ filas }: { filas: CompraItemFila[] }) {
+  if (filas.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+        No hay compras con esos filtros en el período.
+      </div>
+    );
+  }
+  const unidades = filas.reduce((a, b) => a + b.cantidad, 0);
+  const monto = filas.reduce((a, b) => a + b.total, 0);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full min-w-[820px] text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-3 py-2.5 font-medium">Fecha</th>
+            <th className="px-3 py-2.5 font-medium">Compra</th>
+            <th className="px-3 py-2.5 font-medium">Proveedor</th>
+            <th className="px-3 py-2.5 font-medium">Producto</th>
+            <th className="px-3 py-2.5 font-medium text-right">Cantidad</th>
+            <th className="px-3 py-2.5 font-medium text-right">Costo unit.</th>
+            <th className="px-3 py-2.5 font-medium text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {filas.map((it, i) => (
+            <tr key={`${it.numero_control}-${i}`} className="transition-colors hover:bg-[#4FAEB2]/5">
+              <td className="px-3 py-2.5 text-xs tabular-nums text-slate-600">{formatFecha(it.fecha)}</td>
+              <td className="px-3 py-2.5 font-mono text-xs font-semibold text-[#3F8E91]">{it.numero_control}</td>
+              <td className="px-3 py-2.5 text-xs font-medium text-slate-800">{it.proveedor_nombre}</td>
+              <td className="px-3 py-2.5 text-xs text-slate-700">{it.producto_nombre}</td>
+              <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-600">{it.cantidad}</td>
+              <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-600">{formatGs(it.costo_unitario)}</td>
+              <td className="px-3 py-2.5 text-right text-xs tabular-nums font-semibold text-slate-900">{formatGs(it.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-200 bg-slate-50/90">
+            <td colSpan={4} className="px-3 py-2.5 text-xs text-slate-500">
+              <span className="font-semibold text-slate-700">{filas.length}</span> línea{filas.length === 1 ? "" : "s"}
+            </td>
+            <td className="px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-800">{unidades}</td>
+            <td className="px-3 py-2.5" />
+            <td className="px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-900">{formatGs(monto)}</td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }

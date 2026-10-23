@@ -9,6 +9,7 @@ import MesSelector from "@/components/reportes/MesSelector";
 import { getVentasReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { VentasReporte, TipoPrecioReporte } from "@/lib/reportes/types";
+import { productoMatchesQuery } from "@/lib/productos/token-search";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -27,6 +28,8 @@ export default function VentasReportePage() {
   const [mes, setMes] = useState(mesActualAsuncion());
   const [data, setData] = useState<VentasReporte | null>(null);
   const [cargando, setCargando] = useState(true);
+  /** Filtro del detalle: qué producto se llevaron y cuándo. */
+  const [buscar, setBuscar] = useState("");
 
   useEffect(() => {
     let cancel = false;
@@ -34,6 +37,15 @@ export default function VentasReportePage() {
     getVentasReporte(mes).then((d) => { if (!cancel) { setData(d); setCargando(false); } });
     return () => { cancel = true; };
   }, [mes]);
+
+  // Busca por nombre de producto o por número de venta, con los mismos tokens
+  // que el resto del ERP (así "heladera 300" encuentra "Heladera 300 litros").
+  const termino = buscar.trim();
+  const itemsFiltrados = !data
+    ? []
+    : termino === ""
+      ? data.items
+      : data.items.filter((it) => productoMatchesQuery(termino, it.producto_nombre, it.numero_control));
 
   return (
     <div className="space-y-8">
@@ -140,6 +152,70 @@ export default function VentasReportePage() {
                       </tr>
                     ))}
                   </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Detalle por producto: el dato ya se calculaba, pero la pantalla solo
+              mostraba totales. Acá se ve qué se llevó cada venta y en qué fecha. */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-800">Detalle: qué se vendió y cuándo</h2>
+                <p className="mt-0.5 text-xs text-slate-500">Una línea por producto vendido, con su venta y su fecha.</p>
+              </div>
+              <input
+                type="text"
+                value={buscar}
+                onChange={(e) => setBuscar(e.target.value)}
+                placeholder="Filtrar por producto o N° de venta…"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#4FAEB2] sm:w-72"
+              />
+            </div>
+            {itemsFiltrados.length === 0 ? (
+              <p className="text-sm text-slate-400">
+                {data.items.length === 0 ? "Sin ventas en el mes." : `Sin resultados para "${buscar.trim()}".`}
+              </p>
+            ) : (
+              <div className="max-h-[32rem] overflow-auto rounded-lg border border-slate-200">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2.5 font-medium">Fecha</th>
+                      <th className="px-3 py-2.5 font-medium">Venta</th>
+                      <th className="px-3 py-2.5 font-medium">Producto</th>
+                      <th className="px-3 py-2.5 font-medium text-right">Cantidad</th>
+                      <th className="px-3 py-2.5 font-medium text-right">Precio</th>
+                      <th className="px-3 py-2.5 font-medium text-right">Total línea</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {itemsFiltrados.map((it, i) => (
+                      <tr key={`${it.numero_control}-${i}`} className="hover:bg-slate-50">
+                        <td className="px-3 py-2.5 text-slate-600">{formatFecha(it.fecha)}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs font-medium text-slate-700">{it.numero_control}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{it.producto_nombre}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{it.cantidad}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{formatGs(it.precio_venta)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-800">{formatGs(it.total_linea)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 bg-slate-50/90">
+                      <td colSpan={3} className="px-3 py-2.5 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-700">{itemsFiltrados.length}</span> línea{itemsFiltrados.length === 1 ? "" : "s"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-800">
+                        {itemsFiltrados.reduce((a, b) => a + b.cantidad, 0)}
+                      </td>
+                      <td className="px-3 py-2.5" />
+                      <td className="px-3 py-2.5 text-right text-sm font-bold tabular-nums text-slate-800">
+                        {formatGs(itemsFiltrados.reduce((a, b) => a + b.total_linea, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}

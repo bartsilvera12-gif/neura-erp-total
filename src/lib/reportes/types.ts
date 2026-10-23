@@ -223,10 +223,23 @@ export interface OrdenPendienteFila {
   estado: string; // 'pendiente' | 'recibida_parcial'
 }
 
+/** Una línea de compra: qué producto entró, cuánto, a qué costo y cuándo. */
+export interface CompraItemFila {
+  numero_control: string;
+  fecha: string;
+  proveedor_nombre: string;
+  producto_nombre: string;
+  cantidad: number;
+  costo_unitario: number;
+  total: number;
+}
+
 export interface ComprasPanel {
   desde: string;
   hasta: string;
   compras: CompraPanelFila[];
+  /** Detalle línea por línea de esas mismas compras. */
+  items: CompraItemFila[];
   pendientes: OrdenPendienteFila[];
   totales: {
     total_compras: number;      // cantidad de compras (por numero_control)
