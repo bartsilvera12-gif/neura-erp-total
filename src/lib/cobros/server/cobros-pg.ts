@@ -48,14 +48,14 @@ export async function registrarCobro(
   sb: AppSupabaseClient,
   empresaId: string,
   input: RegistrarCobroInput
-): Promise<{ cobro_id: string; saldo_nuevo: number; estado: string }> {
+): Promise<{ cobro_id: string; saldo_nuevo: number; estado: string; caja_warning: string | null }> {
   const monto = round2(Number(input.monto) || 0);
   if (!(monto > 0)) throw new CobroError("El monto del cobro debe ser mayor a cero.");
   if (!input.cuenta_por_cobrar_id) throw new CobroError("Falta la cuenta por cobrar.");
 
   const cq = await sb
     .from("cuentas_por_cobrar")
-    .select("id, cliente_id, venta_id, total, saldo, estado")
+    .select("id, cliente_id, venta_id, numero_venta, total, saldo, estado")
     .eq("empresa_id", empresaId)
     .eq("id", input.cuenta_por_cobrar_id)
     .maybeSingle();
@@ -65,6 +65,7 @@ export async function registrarCobro(
     id: string;
     cliente_id: string;
     venta_id: string;
+    numero_venta: string | null;
     total: number | string;
     saldo: number | string;
     estado: string;
@@ -127,7 +128,84 @@ export async function registrarCobro(
   //    único desalineado es el detalle por cuota, que se puede recomponer.
   await imputarACuotas(sb, empresaId, cxc.id, cobroId, monto);
 
-  return { cobro_id: cobroId, saldo_nuevo: saldoNuevo < 0 ? 0 : saldoNuevo, estado: estadoNuevo };
+  // 4) El efectivo entra a la caja del turno.
+  let cajaWarning: string | null = null;
+  if (metodoValido(input.metodo_pago) === "efectivo") {
+    const cajaId = await registrarIngresoCaja(sb, empresaId, {
+      monto,
+      concepto: `Cobro ${cxc.numero_venta ?? ""}`.trim(),
+      ventaId: cxc.venta_id ?? null,
+      clienteId: cxc.cliente_id ?? null,
+      usuarioId: input.usuario_id || null,
+      usuarioNombre: input.usuario_nombre?.trim() || null,
+    });
+    if (!cajaId) {
+      cajaWarning =
+        "El cobro quedó registrado, pero no entró a ninguna caja porque no hay una abierta. Abrí la caja y cargá el ingreso a mano.";
+    }
+  }
+
+  return {
+    cobro_id: cobroId,
+    saldo_nuevo: saldoNuevo < 0 ? 0 : saldoNuevo,
+    estado: estadoNuevo,
+    caja_warning: cajaWarning,
+  };
+}
+
+/**
+ * Ingreso de caja por un cobro EN EFECTIVO.
+ *
+ * La plata de una venta a crédito no entra a caja al vender: entra cuando el
+ * cliente paga. Hasta ahora ese cobro no dejaba rastro en el arqueo, así que
+ * el cajero terminaba el día con efectivo de más en el cajón y la caja no lo
+ * explicaba.
+ *
+ * Solo efectivo: una transferencia o una tarjeta no cambian lo que hay en el
+ * cajón, y el arqueo cuenta únicamente efectivo.
+ *
+ * El movimiento se guarda con `venta_id`, así la anulación de la venta —que ya
+ * anula los movimientos por venta— lo revierte sin tener que acordarse de él.
+ *
+ * Devuelve `null` si no hay caja abierta: el cobro igual queda registrado y
+ * quien llama avisa, porque bloquearlo dejaría al cobrador sin poder trabajar.
+ */
+async function registrarIngresoCaja(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  args: {
+    monto: number;
+    concepto: string;
+    ventaId: string | null;
+    clienteId: string | null;
+    usuarioId: string | null;
+    usuarioNombre: string | null;
+  }
+): Promise<string | null> {
+  const cajaQ = await sb
+    .from("cajas")
+    .select("id")
+    .eq("empresa_id", empresaId)
+    .eq("estado", "abierta")
+    .order("fecha_apertura", { ascending: false })
+    .limit(1);
+  if (cajaQ.error) return null;
+  const cajaId = (cajaQ.data ?? [])[0]?.id as string | undefined;
+  if (!cajaId) return null;
+
+  const ins = await sb.from("caja_movimientos").insert({
+    empresa_id: empresaId,
+    caja_id: cajaId,
+    tipo: "ingreso",
+    concepto: args.concepto.slice(0, 200),
+    monto: args.monto,
+    medio_pago: "efectivo",
+    venta_id: args.ventaId,
+    cliente_id: args.clienteId,
+    usuario_id: args.usuarioId,
+    usuario_email: args.usuarioNombre,
+  });
+  return ins.error ? null : cajaId;
 }
 
 /**

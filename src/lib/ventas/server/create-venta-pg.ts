@@ -968,6 +968,26 @@ export async function createVentaTransaccionalPg(
           usuario_nombre: params.usuarioNombre ?? null,
         });
         if (insEntrega.error) throw new Error(insEntrega.error.message);
+
+        // La entrega en efectivo es plata que entra al cajón ahora: tiene que
+        // verse en el arqueo. La venta a crédito en sí no mueve caja, pero el
+        // anticipo sí. Va con `venta_id`, así la anulación de la venta —que ya
+        // anula los movimientos por venta— lo revierte sola.
+        if ((params.metodoPago ?? "efectivo") === "efectivo") {
+          const insMovCaja = await sb.from("caja_movimientos").insert({
+            empresa_id: params.empresaId,
+            caja_id: cajaIdActual,
+            tipo: "ingreso",
+            concepto: `Entrega inicial ${numeroControl}`.slice(0, 200),
+            monto: entregaInicial,
+            medio_pago: "efectivo",
+            venta_id: ventaId,
+            cliente_id: params.clienteId,
+            usuario_id: params.usuarioId ?? null,
+            usuario_email: params.usuarioNombre ?? null,
+          });
+          if (insMovCaja.error) throw new Error(insMovCaja.error.message);
+        }
       }
     }
 

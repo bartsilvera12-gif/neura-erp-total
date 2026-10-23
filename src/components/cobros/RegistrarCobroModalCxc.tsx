@@ -49,7 +49,7 @@ export function RegistrarCobroModalCxc({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Tras un cobro exitoso, se ofrece generar el recibo (paso opcional).
-  const [cobroOk, setCobroOk] = useState<{ cobroId: string; monto: number } | null>(null);
+  const [cobroOk, setCobroOk] = useState<{ cobroId: string; monto: number; cajaWarning: string | null } | null>(null);
 
   useEffect(() => {
     if (open && cuenta) {
@@ -115,7 +115,8 @@ export function RegistrarCobroModalCxc({
       // Refrescar datos del padre; pasar a paso "generar recibo" (opcional).
       await onExito();
       const cobroId = body?.data?.cobro_id ? String(body.data.cobro_id) : null;
-      if (cobroId) setCobroOk({ cobroId, monto: m });
+      const cajaWarning = body?.data?.caja_warning ? String(body.data.caja_warning) : null;
+      if (cobroId) setCobroOk({ cobroId, monto: m, cajaWarning });
       else onClose();
     } catch {
       setError("Error de red al registrar el pago.");
@@ -139,6 +140,15 @@ export function RegistrarCobroModalCxc({
             <div className="px-5 py-5 text-center space-y-2">
               <div className="text-3xl">✅</div>
               <p className="text-sm text-slate-700">Cobro de {fmtGs(cobroOk.monto, cuenta.moneda)} registrado.</p>
+              {cobroOk.cajaWarning ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800">
+                  {cobroOk.cajaWarning}
+                </p>
+              ) : (
+                metodo === "efectivo" && (
+                  <p className="text-xs text-emerald-700">El efectivo entró a la caja abierta.</p>
+                )
+              )}
               <p className="text-xs text-slate-500">¿Querés generar el recibo de dinero de este cobro?</p>
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-200 px-5 py-4">
