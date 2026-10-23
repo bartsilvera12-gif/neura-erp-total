@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import Link from "next/link";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
@@ -14,13 +15,7 @@ function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
 }
 function formatFecha(iso: string | null) {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  } catch {
-    return "—";
-  }
+  return formatFechaDdMmAaaa(iso);
 }
 
 export default function ProveedoresReportePage() {
