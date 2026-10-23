@@ -1,13 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Banknote, Download } from "lucide-react";
+import { ArrowLeft, Loader2, Banknote, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import { RegistrarCobroModalCxc } from "@/components/cobros/RegistrarCobroModalCxc";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 
+type Cuota = {
+  numero_cuota: number;
+  fecha_vencimiento: string;
+  monto: number;
+  saldo: number;
+  estado: string;
+  vencida: boolean;
+};
+type Plan = {
+  total_cuotas: number;
+  cuotas_pagadas: number;
+  cuotas_pendientes: number;
+  cuotas_vencidas: number;
+  proxima_numero: number | null;
+  proxima_vencimiento: string | null;
+  proxima_monto: number | null;
+};
 type Mov = {
   id: string;
   numero_venta: string | null;
@@ -18,6 +36,9 @@ type Mov = {
   saldo: number;
   estado: string;
   vencida: boolean;
+  /** Vacío en las cuentas viejas, de un solo vencimiento. */
+  cuotas?: Cuota[];
+  plan?: Plan | null;
 };
 type Cobro = { id: string; fecha_pago: string; monto: number; metodo_pago: string; referencia: string | null };
 type Cliente = { id: string; nombre: string; ruc: string | null; telefono: string | null; direccion: string | null };
@@ -34,13 +55,12 @@ const ESTADO_BADGE: Record<string, string> = {
 function fmtGs(n: number) {
   return "Gs. " + Math.round(Number(n) || 0).toLocaleString("es-PY");
 }
+// Las fechas de emisión y vencimiento son días de calendario guardados a las
+// 00:00 UTC: leerlos con la hora local de Asunción (UTC-3) los corría un día
+// para atrás (una venta del 23 se mostraba como 22).
 function fmtFecha(iso: string | null) {
   if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
-  } catch {
-    return iso;
-  }
+  return formatFechaDdMmAaaa(iso);
 }
 
 export default function EstadoCuentaPage() {
@@ -54,6 +74,8 @@ export default function EstadoCuentaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  /** Cuentas con el detalle de cuotas desplegado. */
+  const [verCuotas, setVerCuotas] = useState<Record<string, boolean>>({});
 
   const [cobrando, setCobrando] = useState<Mov | null>(null);
   const [reciboBusy, setReciboBusy] = useState<string | null>(null);
@@ -160,6 +182,7 @@ export default function EstadoCuentaPage() {
                   <th className="py-2.5 px-4 font-medium">Venta</th>
                   <th className="py-2.5 px-4 font-medium">Emisión</th>
                   <th className="py-2.5 px-4 font-medium">Vencimiento</th>
+                  <th className="py-2.5 px-4 font-medium text-center">Cuotas</th>
                   <th className="py-2.5 px-4 font-medium text-right">Total</th>
                   <th className="py-2.5 px-4 font-medium text-right">Cobrado</th>
                   <th className="py-2.5 px-4 font-medium text-right">Saldo</th>
@@ -169,10 +192,31 @@ export default function EstadoCuentaPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {movs.map((m) => (
-                  <tr key={m.id}>
+                  <Fragment key={m.id}>
+                  <tr>
                     <td className="py-2.5 px-4 font-mono font-medium text-gray-800">{m.numero_venta ?? "—"}</td>
                     <td className="py-2.5 px-4 text-gray-600">{fmtFecha(m.fecha_emision)}</td>
                     <td className={`py-2.5 px-4 ${m.vencida ? "font-semibold text-red-600" : "text-gray-600"}`}>{fmtFecha(m.fecha_vencimiento)}</td>
+                    <td className="py-2.5 px-4 text-center">
+                      {m.plan ? (
+                        <button
+                          type="button"
+                          onClick={() => setVerCuotas((p) => ({ ...p, [m.id]: !p[m.id] }))}
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                          title="Ver el detalle de las cuotas"
+                        >
+                          <span className="tabular-nums">{m.plan.cuotas_pagadas}/{m.plan.total_cuotas}</span>
+                          {m.plan.cuotas_vencidas > 0 && (
+                            <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700">
+                              {m.plan.cuotas_vencidas} vencida{m.plan.cuotas_vencidas === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          {verCuotas[m.id] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-4 text-right tabular-nums">{fmtGs(m.total)}</td>
                     <td className="py-2.5 px-4 text-right tabular-nums text-emerald-700">{fmtGs(m.cobrado)}</td>
                     <td className="py-2.5 px-4 text-right tabular-nums font-semibold">{fmtGs(m.saldo)}</td>
@@ -189,6 +233,55 @@ export default function EstadoCuentaPage() {
                       )}
                     </td>
                   </tr>
+                  {m.plan && verCuotas[m.id] && (m.cuotas?.length ?? 0) > 0 && (
+                    <tr className="bg-slate-50/70">
+                      <td colSpan={9} className="px-4 py-3">
+                        <p className="mb-2 text-xs font-semibold text-slate-600">
+                          Pagó {m.plan.cuotas_pagadas} de {m.plan.total_cuotas} cuotas,
+                          {m.plan.cuotas_pendientes > 0 ? ` le faltan ${m.plan.cuotas_pendientes}` : " no le queda ninguna"}
+                          {m.plan.proxima_vencimiento && (
+                            <span className="font-normal text-slate-500">
+                              {" "}· próxima: cuota {m.plan.proxima_numero} de {fmtGs(m.plan.proxima_monto ?? 0)} el {fmtFecha(m.plan.proxima_vencimiento)}
+                            </span>
+                          )}
+                        </p>
+                        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                          <table className="w-full min-w-[520px] text-left text-xs">
+                            <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                              <tr>
+                                <th className="px-3 py-2 font-medium">Cuota</th>
+                                <th className="px-3 py-2 font-medium">Vence</th>
+                                <th className="px-3 py-2 font-medium text-right">Monto</th>
+                                <th className="px-3 py-2 font-medium text-right">Pagado</th>
+                                <th className="px-3 py-2 font-medium text-right">Saldo</th>
+                                <th className="px-3 py-2 font-medium">Estado</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {(m.cuotas ?? []).map((q) => {
+                                const estadoVisQ = q.vencida ? "vencido" : q.estado === "pagada" ? "pagado" : q.estado;
+                                return (
+                                  <tr key={q.numero_cuota}>
+                                    <td className="px-3 py-2 font-medium text-slate-700">{q.numero_cuota}/{m.plan?.total_cuotas}</td>
+                                    <td className={`px-3 py-2 ${q.vencida ? "font-semibold text-red-600" : "text-slate-600"}`}>{fmtFecha(q.fecha_vencimiento)}</td>
+                                    <td className="px-3 py-2 text-right tabular-nums">{fmtGs(q.monto)}</td>
+                                    <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{fmtGs(q.monto - q.saldo)}</td>
+                                    <td className={`px-3 py-2 text-right tabular-nums ${q.saldo > 0 ? "font-semibold text-amber-600" : "text-slate-400"}`}>{fmtGs(q.saldo)}</td>
+                                    <td className="px-3 py-2">
+                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ESTADO_BADGE[estadoVisQ] ?? ESTADO_BADGE.pendiente}`}>
+                                        {estadoVisQ.charAt(0).toUpperCase() + estadoVisQ.slice(1)}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
