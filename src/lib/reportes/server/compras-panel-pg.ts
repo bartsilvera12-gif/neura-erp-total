@@ -25,6 +25,18 @@ function pool() {
   return p;
 }
 
+/**
+ * Fecha lista para la pantalla, en ISO.
+ *
+ * El driver de Postgres devuelve un `Date` para las columnas timestamptz, y
+ * `String(date)` lo escribe en hora local ("Mon Oct 12 2026 21:00:00 GMT-0300").
+ * Como las compras se guardan a las 00:00 UTC, el formateador ya no reconocía
+ * esa marca y mostraba el día anterior: una compra del 13/10 figuraba 12/10.
+ */
+function fechaIso(v: unknown): string {
+  return v instanceof Date ? v.toISOString() : String(v ?? "");
+}
+
 function num(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -59,7 +71,7 @@ export async function getComprasPanel(
   );
   const compras: CompraPanelFila[] = comprasQ.rows.map((r: Record<string, unknown>) => ({
     numero_control: String(r.numero_control),
-    fecha: String(r.fecha),
+    fecha: fechaIso(r.fecha),
     numero_factura: r.numero_factura != null ? String(r.numero_factura) : null,
     proveedor_nombre: r.proveedor_nombre != null ? String(r.proveedor_nombre) : "—",
     items_count: num(r.items_count),
@@ -82,7 +94,7 @@ export async function getComprasPanel(
   );
   const items: CompraItemFila[] = itemsQ.rows.map((r: Record<string, unknown>) => ({
     numero_control: String(r.numero_control),
-    fecha: String(r.fecha),
+    fecha: fechaIso(r.fecha),
     proveedor_nombre: r.proveedor_nombre != null ? String(r.proveedor_nombre) : "—",
     producto_nombre: r.producto_nombre != null ? String(r.producto_nombre) : "—",
     cantidad: num(r.cantidad),
@@ -123,7 +135,7 @@ export async function getComprasPanel(
     return {
       orden_item_id: String(r.orden_item_id),
       numero_oc: String(r.numero_oc),
-      fecha: String(r.fecha),
+      fecha: fechaIso(r.fecha),
       proveedor_nombre: r.proveedor_nombre != null ? String(r.proveedor_nombre) : "—",
       producto_id: String(r.producto_id),
       producto_nombre: r.producto_nombre != null ? String(r.producto_nombre) : "—",
