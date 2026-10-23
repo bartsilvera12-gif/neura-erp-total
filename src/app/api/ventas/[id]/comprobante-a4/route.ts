@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getEmisorDatos } from "@/lib/documentos/emisor";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 
 function escapeHtml(s: string): string {
   return String(s ?? "")
@@ -112,7 +113,7 @@ export async function GET(
     // 1) Venta
     const { data: venta } = await sb
       .from("ventas")
-      .select("id, numero_control, fecha, subtotal, monto_iva, total, retencion_iva_pct, retencion_iva_monto, tipo_venta, plazo_dias, metodo_pago, cliente_id, nota_remision_numero, genera_nota_remision, observaciones, estado")
+      .select("id, numero_control, fecha, subtotal, monto_iva, total, retencion_iva_pct, retencion_iva_monto, tipo_venta, plazo_dias, cuotas_cantidad, entrega_inicial, metodo_pago, cliente_id, nota_remision_numero, genera_nota_remision, observaciones, estado")
       .eq("id", ventaId)
       .eq("empresa_id", empresaId)
       .maybeSingle();
@@ -124,6 +125,22 @@ export async function GET(
       .select("producto_nombre, sku, cantidad, precio_venta, tipo_iva, subtotal, monto_iva, total_linea")
       .eq("venta_id", ventaId)
       .eq("empresa_id", empresaId);
+
+    // 2a) Plan de cuotas. Es lo único que el cliente se lleva en la mano: sin
+    //     esto el papel decía apenas "CREDITO" y no había forma de saber cuánto
+    //     paga ni cuándo. Las ventas viejas no tienen cuotas y no muestran nada.
+    const { data: cuotasRows } = await sb
+      .from("venta_cuotas")
+      .select("numero_cuota, fecha_vencimiento, monto, cuenta_por_cobrar_id")
+      .eq("venta_id", ventaId)
+      .eq("empresa_id", empresaId)
+      .neq("estado", "anulada")
+      .order("numero_cuota", { ascending: true });
+    const cuotas = (cuotasRows ?? []) as Array<{
+      numero_cuota: number;
+      fecha_vencimiento: string;
+      monto: number | string;
+    }>;
 
     // 2b) Pagos (para mostrar desglose si fue mixto)
     const { data: pagosRows } = await sb
@@ -202,9 +219,35 @@ export async function GET(
     const notaRem = v.genera_nota_remision === true && v.nota_remision_numero
       ? String(v.nota_remision_numero)
       : "";
+    const entregaInicial = Math.round(Number((v as { entrega_inicial?: unknown }).entrega_inicial) || 0);
     const condicion = v.tipo_venta === "CREDITO"
-      ? `CREDITO${v.plazo_dias ? ` ${v.plazo_dias}d` : ""}`
+      ? cuotas.length > 0
+        ? `CREDITO EN ${cuotas.length} CUOTA${cuotas.length === 1 ? "" : "S"}`
+        : `CREDITO${v.plazo_dias ? ` ${v.plazo_dias}d` : ""}`
       : "CONTADO";
+
+    const totalCuotas = cuotas.reduce((a, c) => a + (Number(c.monto) || 0), 0);
+    const planCuotasHtml = cuotas.length === 0
+      ? ""
+      : `<div class="plan">
+           <div class="plan-tit">PLAN DE PAGO</div>
+           ${entregaInicial > 0
+              ? `<div class="linea"><span class="lbl">ENTREGA INICIAL:</span> <span class="val">Gs. ${fmtGs(entregaInicial)}</span></div>
+                 <div class="linea"><span class="lbl">SALDO FINANCIADO:</span> <span class="val">Gs. ${fmtGs(totalCuotas)}</span></div>`
+              : ""}
+           <table class="cuotas">
+             <thead><tr><th>CUOTA</th><th>VENCIMIENTO</th><th class="num">MONTO</th></tr></thead>
+             <tbody>
+               ${cuotas
+                  .map((c) => `<tr>
+                     <td>${c.numero_cuota}/${cuotas.length}</td>
+                     <td>${escapeHtml(formatFechaDdMmAaaa(String(c.fecha_vencimiento)))}</td>
+                     <td class="num">Gs. ${fmtGs(Number(c.monto) || 0)}</td>
+                   </tr>`)
+                  .join("")}
+             </tbody>
+           </table>
+         </div>`;
 
     const filasHtml = filas
       .map(
@@ -263,6 +306,13 @@ export async function GET(
   .header-top .empresa-datos { font-size: 11.5px; line-height: 1.4; }
   .header-top .empresa-datos .razon { font-weight: 700; letter-spacing: 0.5px; }
   .fecha-top { font-size: 12px; font-weight: 700; text-align: right; }
+
+  .plan { margin-top: 6px; padding-top: 4px; border-top: 1px dashed #999; }
+  .plan-tit { font-weight: bold; font-size: 10px; letter-spacing: .5px; margin-bottom: 2px; }
+  table.cuotas { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 2px; }
+  table.cuotas th { text-align: left; border-bottom: 1px solid #999; padding: 1px 4px; font-size: 9px; }
+  table.cuotas td { padding: 1px 4px; }
+  table.cuotas .num { text-align: right; }
 
   /* Dos columnas para datos del cliente / condicion */
   .info {
@@ -447,6 +497,7 @@ export async function GET(
                 .join("")}`
           : ""
       }
+      ${planCuotasHtml}
       ${retMonto > 0
         ? `<div class="linea"><span class="lbl">TOTAL:</span> <span class="val">Gs. ${fmtGs(total)}</span></div>
       <div class="linea"><span class="lbl">RETENCION IVA${retPct ? ` (${retPct}%)` : ""}:</span> <span class="val">- Gs. ${fmtGs(retMonto)}</span></div>

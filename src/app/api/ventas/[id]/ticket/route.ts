@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { membreteA4, membreteTicket } from "@/lib/documentos/membrete";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 
 /**
  * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1
@@ -151,6 +152,15 @@ interface VentaRow {
   cliente_id: string | null;
   genera_nota_remision: boolean | null;
   nota_remision_numero: string | null;
+  tipo_venta: string | null;
+  entrega_inicial: number | string | null;
+}
+
+/** Una cuota del plan de la venta, para imprimirla en el ticket del cliente. */
+interface CuotaTicketRow {
+  numero_cuota: number;
+  fecha_vencimiento: string;
+  monto: number | string;
 }
 
 interface ItemRow {
@@ -196,6 +206,37 @@ function desglosePagosHtml(pagos: PagoDetalleRow[]): string {
     .join("");
 }
 
+/**
+ * Plan de cuotas en el ticket del cliente.
+ *
+ * Es el único papel que se lleva: sin esto decía apenas el total y no había
+ * forma de saber cuánto paga ni cuándo. Solo sale en la copia del cliente y
+ * solo si la venta tiene cuotas (las viejas, a un vencimiento, no imprimen).
+ */
+function planCuotasTicketHtml(cuotas: CuotaTicketRow[], entregaInicial: number): string {
+  if (!Array.isArray(cuotas) || cuotas.length === 0) return "";
+  const financiado = cuotas.reduce((a, c) => a + (Number(c.monto) || 0), 0);
+  const filas = cuotas
+    .map(
+      (c) => `<tr>
+        <td class="lbl">${c.numero_cuota}/${cuotas.length} · ${escapeHtml(formatFechaDdMmAaaa(String(c.fecha_vencimiento)))}</td>
+        <td class="val">${formatGs(Number(c.monto) || 0)}</td>
+      </tr>`
+    )
+    .join("");
+  return `<hr>
+    <div class="plan-tit">PLAN DE PAGO · ${cuotas.length} CUOTA${cuotas.length === 1 ? "" : "S"}</div>
+    <table class="totales">
+      <tbody>
+        ${entregaInicial > 0
+          ? `<tr><td class="lbl">Entrega inicial</td><td class="val">${formatGs(entregaInicial)}</td></tr>
+             <tr><td class="lbl">Saldo financiado</td><td class="val">${formatGs(financiado)}</td></tr>`
+          : ""}
+        ${filas}
+      </tbody>
+    </table>`;
+}
+
 // ── Render de cada copia ───────────────────────────────────────────────────
 
 function renderCopia(opts: {
@@ -207,8 +248,9 @@ function renderCopia(opts: {
   isLast: boolean;
   negocio: string;
   pagos: PagoDetalleRow[];
+  cuotas: CuotaTicketRow[];
 }): string {
-  const { tipo, venta, items, brief, fontPx, isLast, pagos } = opts;
+  const { tipo, venta, items, brief, fontPx, isLast, pagos, cuotas } = opts;
   const showPrices = tipo === "cliente";
   const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
   const modalidad = modalidadLabel(brief?.modalidad);
@@ -282,7 +324,8 @@ function renderCopia(opts: {
            <tr><td class="lbl">Pago</td><td class="val">${metodoPagoLabel(venta.metodo_pago)}</td></tr>
            ${desglosePagosHtml(pagos)}
          </tbody>
-       </table>`
+       </table>
+       ${planCuotasTicketHtml(cuotas, Math.round(Number(venta.entrega_inicial) || 0))}`
     : "";
   const footerHtml = showPrices
     ? `<hr>
@@ -439,7 +482,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // Venta
   const vQ = await ctx.supabase
     .from("ventas")
-    .select("id, numero_control, fecha, subtotal, monto_iva, total, retencion_iva_pct, retencion_iva_monto, observaciones, metodo_pago, cliente_id, genera_nota_remision, nota_remision_numero")
+    .select("id, numero_control, fecha, subtotal, monto_iva, total, retencion_iva_pct, retencion_iva_monto, observaciones, metodo_pago, cliente_id, genera_nota_remision, nota_remision_numero, tipo_venta, entrega_inicial")
     .eq("id", id)
     .eq("empresa_id", empresaId)
     .maybeSingle();
@@ -459,6 +502,22 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     pagos = (pQ.data ?? []) as unknown as PagoDetalleRow[];
   } catch {
     pagos = [];
+  }
+
+  // Cuotas del plan, para el ticket del cliente. Si falla (migración sin correr,
+  // o venta vieja sin cuotas) el ticket sale como antes, sin el bloque.
+  let cuotas: CuotaTicketRow[] = [];
+  try {
+    const cQ = await ctx.supabase
+      .from("venta_cuotas")
+      .select("numero_cuota, fecha_vencimiento, monto")
+      .eq("venta_id", id)
+      .eq("empresa_id", empresaId)
+      .neq("estado", "anulada")
+      .order("numero_cuota", { ascending: true });
+    cuotas = (cQ.data ?? []) as unknown as CuotaTicketRow[];
+  } catch {
+    cuotas = [];
   }
 
   // Nombre del negocio para el encabezado (env → empresa → fallback). Nunca hardcode.
@@ -607,7 +666,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
   const seccionesHtml = copias
     .map((tipo, idx) =>
-      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, pagos })
+      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, pagos, cuotas })
     )
     .join("");
 
@@ -638,6 +697,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .totales .lbl { text-align: left; }
   .totales .val { text-align: right; white-space: nowrap; }
   .total-row { font-weight: bold; font-size: ${fontPx + 2}px; border-top: 1px solid #000; }
+  .plan-tit { font-weight: bold; text-align: center; margin: 1mm 0 0.5mm; }
   .obs { font-size: ${fontPx - 1}px; margin: 2mm 0; }
   .footer { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-style: italic; }
   .footer-cocina { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-weight: bold; }
