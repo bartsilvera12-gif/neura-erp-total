@@ -740,7 +740,14 @@ export default function NuevaVentaPage() {
   const ventaValida   = items.length > 0 && creditoValido && pagoMixtoValido;
 
   // Cliente (opcional) — selección + filtrado del buscador.
-  const clienteSel = clientes.find((c) => c.id === clienteId) ?? null;
+  // El desplegable muestra `clientesIniciales` mientras no se escribió nada y
+  // `clientes` cuando hubo búsqueda, así que el elegido puede estar en cualquiera
+  // de las dos. Buscarlo solo en `clientes` dejaba el campo en blanco al elegir
+  // de la lista alfabética: se guardaba el id pero no había a quién mostrar.
+  const clienteSel =
+    clientes.find((c) => c.id === clienteId) ??
+    clientesIniciales.find((c) => c.id === clienteId) ??
+    null;
   // El servidor ya filtró por nombre/cédula/RUC/teléfono (typeahead): acá solo se
   // muestran los resultados (sin re-filtrar por label, que ocultaría coincidencias
   // por cédula). Con <2 letras no se muestra nada viejo (se pide escribir).
