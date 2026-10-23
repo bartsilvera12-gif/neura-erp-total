@@ -163,13 +163,7 @@ function FacturaDetalleInner() {
     <div className="max-w-6xl mx-auto space-y-6 py-6 px-4 sm:px-6 print:px-0 w-full">
       <div className="flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div>
-          <Link
-            href={`/gestion-clientes?cliente=${encodeURIComponent(factura.cliente_id)}`}
-            className="text-xs font-medium text-[#0EA5E9] hover:underline"
-          >
-            ← Gestión de clientes
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">Factura {factura.numero_factura}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Factura {factura.numero_factura}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Cliente:{" "}
             <Link href={`/clientes/${factura.cliente_id}`} className="text-[#0EA5E9] font-medium hover:underline">
