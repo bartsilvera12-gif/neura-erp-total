@@ -642,8 +642,13 @@ export async function createVentaTransaccionalPg(
       estado: "completada",
       tipo_venta: params.tipoVenta,
       plazo_dias: params.plazoDias,
-      cuotas_cantidad: cuotasCantidad > 0 ? cuotasCantidad : null,
-      entrega_inicial: entregaInicial,
+      // Solo se mandan cuando hay plan de cuotas. PostgREST rechaza el INSERT
+      // entero si menciona una columna que su caché de esquema todavía no tiene:
+      // si estos campos viajaran siempre, una venta al contado se caería mientras
+      // la migración no esté corrida. Omitirlos es equivalente (la columna es
+      // nullable y el anticipo arranca en 0).
+      ...(cuotasCantidad > 0 ? { cuotas_cantidad: cuotasCantidad } : {}),
+      ...(entregaInicial > 0 ? { entrega_inicial: entregaInicial } : {}),
       metodo_pago: params.metodoPago,
       genera_nota_remision: generaNota,
       nota_remision_numero: notaRemisionNumero,

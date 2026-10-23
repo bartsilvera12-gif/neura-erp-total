@@ -992,7 +992,14 @@ export default function NuevaVentaPage() {
           setConfirmSinStockOpen(true);
           return;
         }
-        setErrorVenta(resultado.error);
+        // El error de PostgREST cuando falta la tabla de cuotas no le dice nada
+        // al cajero. Se traduce, porque la venta al contado sí funciona.
+        const err = String(resultado.error ?? "");
+        setErrorVenta(
+          /venta_cuotas|cuotas_cantidad|entrega_inicial/i.test(err)
+            ? "La base todavía no tiene las cuotas de venta habilitadas. Registrá la venta al contado o avisá a soporte para que corra la actualización pendiente."
+            : resultado.error
+        );
         return;
       }
       // Alta exitosa: renovar la clave para que la PRÓXIMA venta sea una
