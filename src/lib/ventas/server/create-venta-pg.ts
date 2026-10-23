@@ -6,6 +6,7 @@ import {
 } from "@/lib/inventario/presentaciones-server";
 import type { ProductoPresentacion } from "@/lib/inventario/presentaciones-types";
 import { obtenerSiguienteNumeroFacturaEmpresa } from "@/lib/facturacion/factura-suscripcion-servidor";
+import { planCuotas, estadoCuota } from "@/lib/ventas/cuotas";
 
 /** Un faltante de stock detectado al validar la venta. */
 export interface FaltanteStock {
@@ -89,6 +90,10 @@ export interface CreateVentaPgParams {
   pedidoCocina?: CreateVentaPedidoCocinaInput | null;
   /** Si true, autoriza vender aunque falte stock de productos o insumos (stock puede quedar negativo). */
   permitirSinStock?: boolean;
+  /** Crédito en cuotas mensuales: en cuántas se divide. null/0 = un solo vencimiento (comportamiento viejo). */
+  cuotasCantidad?: number | null;
+  /** Crédito: anticipo que el cliente paga al confirmar. Las cuotas se calculan sobre el resto. */
+  entregaInicial?: number | null;
   /** Si true y hay cliente, la venta emite nota de remisión (documento NO fiscal) con número NR-XXXXXX. */
   generaNotaRemision?: boolean;
   /** Caja (turno) a la que se asocia la venta. La elige el cajero cuando hay varias abiertas. */
@@ -611,6 +616,15 @@ export async function createVentaTransaccionalPg(
   );
   const totalNeto = Math.max(0, Math.round(calc.total) - retMonto);
 
+  // Crédito en cuotas: el anticipo nunca puede superar el total, y las cuotas se
+  // calculan sobre lo que queda. Con 0 cuotas se mantiene el crédito de un solo
+  // vencimiento de siempre, así las ventas viejas y las nuevas conviven.
+  const esCredito = params.tipoVenta === "CREDITO" && !!params.clienteId;
+  const entregaInicial = esCredito
+    ? Math.max(0, Math.min(totalNeto, Math.round(Number(params.entregaInicial) || 0)))
+    : 0;
+  const cuotasCantidad = esCredito ? Math.max(0, Math.floor(Number(params.cuotasCantidad) || 0)) : 0;
+
   // 5) Insertar venta
   const insVenta = await sb
     .from("ventas")
@@ -628,6 +642,8 @@ export async function createVentaTransaccionalPg(
       estado: "completada",
       tipo_venta: params.tipoVenta,
       plazo_dias: params.plazoDias,
+      cuotas_cantidad: cuotasCantidad > 0 ? cuotasCantidad : null,
+      entrega_inicial: entregaInicial,
       metodo_pago: params.metodoPago,
       genera_nota_remision: generaNota,
       nota_remision_numero: notaRemisionNumero,
@@ -662,6 +678,10 @@ export async function createVentaTransaccionalPg(
 
   // Helper de rollback best-effort
   const rollback = async () => {
+    try {
+      // Antes que la cuenta: la entrega inicial cuelga de ella y no se borra sola.
+      await sb.from("cobros_clientes").delete().eq("venta_id", ventaId).eq("empresa_id", params.empresaId);
+    } catch {}
     try {
       await sb.from("cuentas_por_cobrar").delete().eq("venta_id", ventaId).eq("empresa_id", params.empresaId);
     } catch {}
@@ -880,6 +900,18 @@ export async function createVentaTransaccionalPg(
         d.setDate(d.getDate() + params.plazoDias);
         fechaVencimiento = d.toISOString().slice(0, 10);
       }
+      // Cuotas mensuales. La cuenta sigue valiendo el total de la venta (los
+      // reportes comparan vendido contra cobrado), pero su saldo arranca ya sin
+      // la entrega inicial, que se registra como cobro aparte más abajo.
+      const cuotas = planCuotas({
+        totalFinanciado: totalNeto - entregaInicial,
+        cantidadCuotas: cuotasCantidad,
+        fechaBase: fechaEmision,
+      });
+      // Con cuotas, el vencimiento de la cuenta es el de la PRIMERA: es lo que
+      // leen la antigüedad de deuda y los avisos de mora, que no saben de cuotas.
+      if (cuotas.length > 0) fechaVencimiento = cuotas[0].fecha_vencimiento;
+
       const insCxc = await sb
         .from("cuentas_por_cobrar")
         .insert({
@@ -891,13 +923,47 @@ export async function createVentaTransaccionalPg(
           fecha_vencimiento: fechaVencimiento,
           moneda: params.moneda === "USD" ? "USD" : "PYG",
           total: totalNeto,
-          saldo: totalNeto,
-          estado: "pendiente",
+          saldo: Math.max(0, totalNeto - entregaInicial),
+          estado: entregaInicial > 0 && entregaInicial < totalNeto ? "parcial" : (totalNeto - entregaInicial <= 0 ? "pagado" : "pendiente"),
         })
         .select("id")
         .single();
       if (insCxc.error) throw new Error(insCxc.error.message);
       cuentaPorCobrarId = String((insCxc.data as { id: string }).id);
+
+      if (cuotas.length > 0) {
+        const insCuotas = await sb.from("venta_cuotas").insert(
+          cuotas.map((c) => ({
+            empresa_id: params.empresaId,
+            cuenta_por_cobrar_id: cuentaPorCobrarId,
+            venta_id: ventaId,
+            numero_cuota: c.numero_cuota,
+            fecha_vencimiento: c.fecha_vencimiento,
+            monto: c.monto,
+            saldo: c.monto,
+            estado: estadoCuota(c.monto, c.monto),
+          }))
+        );
+        if (insCuotas.error) throw new Error(insCuotas.error.message);
+      }
+
+      // La entrega inicial es plata que YA entró: queda como cobro de la cuenta,
+      // sin imputarse a ninguna cuota (las cuotas ya se calcularon sin ella).
+      if (entregaInicial > 0) {
+        const insEntrega = await sb.from("cobros_clientes").insert({
+          empresa_id: params.empresaId,
+          cliente_id: params.clienteId,
+          cuenta_por_cobrar_id: cuentaPorCobrarId,
+          venta_id: ventaId,
+          fecha_pago: fechaEmision,
+          monto: entregaInicial,
+          metodo_pago: params.metodoPago || "efectivo",
+          observaciones: "Entrega inicial de la venta a crédito.",
+          usuario_id: params.usuarioId ?? null,
+          usuario_nombre: params.usuarioNombre ?? null,
+        });
+        if (insEntrega.error) throw new Error(insEntrega.error.message);
+      }
     }
 
     // ── Puente Venta → Factura ERP (SIFEN legal) ───────────────────────────

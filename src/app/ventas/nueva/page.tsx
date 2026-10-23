@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Minus, Trash2, ImageIcon, ChevronDown } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
+import { CUOTAS_OPCIONES, planCuotas } from "@/lib/ventas/cuotas";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { getProductos } from "@/lib/inventario/storage";
@@ -180,6 +182,9 @@ export default function NuevaVentaPage() {
   // Contado / Crédito (campos ya existentes en `ventas`: tipo_venta + plazo_dias).
   const [tipoVenta, setTipoVenta] = useState<TipoVenta>("CONTADO");
   const [plazoDias, setPlazoDias] = useState("");
+  // Crédito en cuotas mensuales: cantidad elegida y anticipo cobrado en el acto.
+  const [cuotasCantidad, setCuotasCantidad] = useState(1);
+  const [entregaInicial, setEntregaInicial] = useState(0);
 
   // Tipo de documento a emitir. Solo relevante si la empresa está en modo 'sifen':
   //  - "factura": activa el puente venta→factura. Al confirmar, redirige a
@@ -728,7 +733,16 @@ export default function NuevaVentaPage() {
 
   // Condición de venta: si es Crédito, exigir plazo de al menos 1 día y un cliente.
   const plazoDiasNum = parseInt(plazoDias) || 0;
-  const creditoValido = tipoVenta === "CONTADO" || (plazoDiasNum >= 1 && !!clienteId);
+  // El anticipo no puede comerse la venta entera: si lo paga todo, es contado.
+  const entregaValida = Math.max(0, Math.min(Math.max(0, totalACobrar - 1), Math.round(entregaInicial)));
+  const cuotasPlan = tipoVenta === "CREDITO"
+    ? planCuotas({
+        totalFinanciado: totalACobrar - entregaValida,
+        cantidadCuotas: cuotasCantidad,
+        fechaBase: new Date().toLocaleDateString("en-CA", { timeZone: "America/Asuncion" }),
+      })
+    : [];
+  const creditoValido = tipoVenta === "CONTADO" || (cuotasCantidad >= 1 && !!clienteId);
   // Pago mixto: la suma de los pagos DEBE ser exactamente el total (tolerancia 1 Gs.).
   const pagoMixtoValido =
     !pagoMixto ||
@@ -939,7 +953,9 @@ export default function NuevaVentaPage() {
           monto_iva:    totalIva,
           total:        totalGeneral,
           tipo_venta:   tipoVenta,
-          plazo_dias:   tipoVenta === "CREDITO" ? plazoDiasNum : undefined,
+          plazo_dias:   tipoVenta === "CREDITO" && plazoDiasNum > 0 ? plazoDiasNum : undefined,
+          cuotas_cantidad: tipoVenta === "CREDITO" ? cuotasCantidad : undefined,
+          entrega_inicial: tipoVenta === "CREDITO" ? entregaValida : undefined,
           metodo_pago:  pagoMixto ? "efectivo" : metodoPago, // el backend lo marca 'mixto' si aplica
           cliente_id:   clienteIdFinal || null,
           vendedor_id:  vendedorId || null,
@@ -1169,23 +1185,60 @@ export default function NuevaVentaPage() {
                 onChange={(v) => { setTipoVenta(v); if (v === "CONTADO") setPlazoDias(""); }}
               />
               {tipoVenta === "CREDITO" && (
-                <div className="mt-3">
-                  <label className={labelClass}>Plazo de crédito (días)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={plazoDias}
-                    onChange={(e) => setPlazoDias(e.target.value)}
-                    placeholder="Ej: 30"
-                    className={`${inputClass} ${plazoDiasNum < 1 ? "border-red-300 bg-red-50" : ""}`}
-                  />
-                  {plazoDiasNum < 1 && (
-                    <p className="mt-1 text-[11px] text-red-600">Ingresá un plazo de al menos 1 día.</p>
-                  )}
+                <div className="mt-3 space-y-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className={labelClass}>Cuotas mensuales</label>
+                      <select
+                        value={cuotasCantidad}
+                        onChange={(e) => setCuotasCantidad(parseInt(e.target.value, 10) || 1)}
+                        className={inputClass}
+                      >
+                        {CUOTAS_OPCIONES.map((n) => (
+                          <option key={n} value={n}>{n === 1 ? "1 cuota (pago único)" : `${n} cuotas`}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>
+                        Entrega inicial <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                      </label>
+                      <MontoInput
+                        value={entregaInicial}
+                        onChange={setEntregaInicial}
+                        decimals={false}
+                        onFocus={(e) => e.currentTarget.select()}
+                        placeholder="0"
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+
                   {!clienteId && (
-                    <p className="mt-1 text-[11px] text-red-600">La venta a crédito requiere un cliente: seleccioná uno o creá uno nuevo.</p>
+                    <p className="text-[11px] text-red-600">La venta a crédito requiere un cliente: seleccioná uno o creá uno nuevo.</p>
                   )}
-                  <p className="mt-1 text-[11px] text-slate-500">Al confirmar se genera una cuenta por cobrar por el total.</p>
+
+                  {cuotasPlan.length > 0 ? (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2">
+                      <p className="text-xs font-medium text-slate-700">
+                        {cuotasPlan.length === 1
+                          ? `1 pago de ${formatGs(cuotasPlan[0].monto)}`
+                          : `${cuotasPlan.length} cuotas de ${formatGs(cuotasPlan[0].monto)}`}
+                        {cuotasPlan.length > 1 && cuotasPlan[cuotasPlan.length - 1].monto !== cuotasPlan[0].monto && (
+                          <span className="font-normal text-slate-500">
+                            {" "}(la última, {formatGs(cuotasPlan[cuotasPlan.length - 1].monto)})
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        Primera el {formatFechaDdMmAaaa(cuotasPlan[0].fecha_vencimiento)}
+                        {cuotasPlan.length > 1 && `, última el ${formatFechaDdMmAaaa(cuotasPlan[cuotasPlan.length - 1].fecha_vencimiento)}`}.
+                        {entregaValida > 0 && ` Entrega inicial de ${formatGs(entregaValida)} cobrada hoy.`}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500">Cargá productos para ver el plan de cuotas.</p>
+                  )}
                 </div>
               )}
             </div>

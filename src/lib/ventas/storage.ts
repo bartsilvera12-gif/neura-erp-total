@@ -93,6 +93,10 @@ export async function saveVenta(
     /** Vendedor acreditado para comisión (puede diferir del cajero). */
     vendedor_id?: string | null;
     vendedor_nombre?: string | null;
+    /** Crédito en cuotas mensuales: en cuántas se divide lo financiado. */
+    cuotas_cantidad?: number;
+    /** Crédito: anticipo cobrado al confirmar. Las cuotas salen del resto. */
+    entrega_inicial?: number;
   },
   pedidoCocina?: PedidoCocinaInput,
   pagoDetalle?: PagoDetalleInput | null,

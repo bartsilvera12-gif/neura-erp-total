@@ -124,6 +124,14 @@ export async function POST(request: NextRequest) {
       tipoVenta === "CREDITO" && o.plazo_dias != null && String(o.plazo_dias).trim() !== ""
         ? parseInt(String(o.plazo_dias), 10)
         : null;
+    // Crédito en cuotas mensuales. Sin `cuotas_cantidad` la venta se comporta
+    // como antes: una sola cuenta por cobrar con el vencimiento del plazo.
+    const cuotasCantidad =
+      tipoVenta === "CREDITO" && o.cuotas_cantidad != null && String(o.cuotas_cantidad).trim() !== ""
+        ? Math.max(0, parseInt(String(o.cuotas_cantidad), 10) || 0)
+        : 0;
+    const entregaInicial =
+      tipoVenta === "CREDITO" ? Math.max(0, Math.round(Number(o.entrega_inicial) || 0)) : 0;
     const metodoPago: "efectivo" | "tarjeta" | "transferencia" =
       o.metodo_pago === "tarjeta" || o.metodo_pago === "transferencia" ? o.metodo_pago : "efectivo";
     const clienteRaw = o.cliente_id;
@@ -247,6 +255,8 @@ export async function POST(request: NextRequest) {
         tipoCambio,
         tipoVenta,
         plazoDias: Number.isFinite(plazoDias as number) ? plazoDias : null,
+        cuotasCantidad,
+        entregaInicial,
         metodoPago,
         items,
         subtotalDeclarado,

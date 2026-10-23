@@ -1,4 +1,5 @@
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
+import { repartirCobro, estadoCuota } from "@/lib/ventas/cuotas";
 
 export type MetodoPagoCobro = "efectivo" | "transferencia" | "tarjeta" | "otro";
 
@@ -37,6 +38,11 @@ function metodoValido(m: unknown): MetodoPagoCobro {
  * Registra un cobro contra una cuenta por cobrar: inserta en `cobros_clientes`,
  * descuenta el saldo y recalcula el estado (pendiente|parcial|pagado).
  * No permite cobrar más que el saldo. NO toca stock ni ventas.
+ *
+ * Si la cuenta tiene cuotas, el cobro se imputa de la más vieja a la más nueva
+ * y lo que sobra de tapar una cae sobre la siguiente: el que paga 300 cuando la
+ * cuota era 250 se adelanta 50 del mes que viene. Las cuentas viejas (sin
+ * cuotas) siguen funcionando igual que siempre, contra el saldo total.
  */
 export async function registrarCobro(
   sb: AppSupabaseClient,
@@ -116,5 +122,62 @@ export async function registrarCobro(
     throw new CobroError(upd.error.message, 500);
   }
 
+  // 3) Imputar a las cuotas, si la cuenta las tiene. Va después de actualizar la
+  //    cuenta a propósito: si fallara acá, el saldo general ya quedó bien y lo
+  //    único desalineado es el detalle por cuota, que se puede recomponer.
+  await imputarACuotas(sb, empresaId, cxc.id, cobroId, monto);
+
   return { cobro_id: cobroId, saldo_nuevo: saldoNuevo < 0 ? 0 : saldoNuevo, estado: estadoNuevo };
+}
+
+/**
+ * Reparte un cobro ya registrado sobre las cuotas pendientes de la cuenta.
+ * Silencioso si la cuenta no tiene cuotas (crédito de un solo vencimiento).
+ */
+async function imputarACuotas(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  cuentaPorCobrarId: string,
+  cobroId: string,
+  monto: number
+): Promise<void> {
+  const cq = await sb
+    .from("venta_cuotas")
+    .select("id, monto, saldo")
+    .eq("empresa_id", empresaId)
+    .eq("cuenta_por_cobrar_id", cuentaPorCobrarId)
+    .neq("estado", "anulada")
+    .gt("saldo", 0)
+    .order("numero_cuota", { ascending: true });
+  if (cq.error || !Array.isArray(cq.data) || cq.data.length === 0) return;
+
+  const cuotas = (cq.data as { id: string; monto: number | string; saldo: number | string }[]).map((c) => ({
+    id: String(c.id),
+    monto: Number(c.monto) || 0,
+    saldo: Number(c.saldo) || 0,
+  }));
+  const { aplicaciones } = repartirCobro(monto, cuotas);
+  if (aplicaciones.length === 0) return;
+
+  const montoPorCuota = new Map(cuotas.map((c) => [c.id, c.monto]));
+  for (const ap of aplicaciones) {
+    await sb
+      .from("venta_cuotas")
+      .update({
+        saldo: ap.saldo_nuevo,
+        estado: estadoCuota(montoPorCuota.get(ap.cuota_id) ?? 0, ap.saldo_nuevo),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("empresa_id", empresaId)
+      .eq("id", ap.cuota_id);
+  }
+
+  await sb.from("cobro_cuota_aplicacion").insert(
+    aplicaciones.map((ap) => ({
+      empresa_id: empresaId,
+      cobro_id: cobroId,
+      venta_cuota_id: ap.cuota_id,
+      monto: ap.monto,
+    }))
+  );
 }
