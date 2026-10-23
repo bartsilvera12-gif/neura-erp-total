@@ -5,6 +5,23 @@ import { Loader2, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { RegistrarCobroModalCxc, type CxcRef } from "@/components/cobros/RegistrarCobroModalCxc";
 
+type Cuota = {
+  numero_cuota: number;
+  fecha_vencimiento: string;
+  monto: number;
+  saldo: number;
+  estado: string;
+  vencida: boolean;
+};
+type Plan = {
+  total_cuotas: number;
+  cuotas_pagadas: number;
+  cuotas_pendientes: number;
+  cuotas_vencidas: number;
+  proxima_numero: number | null;
+  proxima_vencimiento: string | null;
+  proxima_monto: number | null;
+};
 type Mov = {
   id: string;
   numero_venta: string | null;
@@ -15,6 +32,9 @@ type Mov = {
   saldo: number;
   estado: string;
   vencida: boolean;
+  /** Vacío en las cuentas viejas, de un solo vencimiento. */
+  cuotas?: Cuota[];
+  plan?: Plan | null;
 };
 type Resumen = { total_vendido: number; saldo_pendiente: number; total_cobrado: number; vencido: number };
 
@@ -60,6 +80,8 @@ export function EstadoCuentaClienteBlock({
   const [error, setError] = useState<string | null>(null);
   const [abierto, setAbierto] = useState(true);
   const [cobrando, setCobrando] = useState<CxcRef | null>(null);
+  /** Cuentas con el detalle de cuotas desplegado. */
+  const [verCuotas, setVerCuotas] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
@@ -165,6 +187,7 @@ export function EstadoCuentaClienteBlock({
                     <th className="py-2.5 px-3 font-medium">Venta</th>
                     <th className="py-2.5 px-3 font-medium">F. emisión</th>
                     <th className="py-2.5 px-3 font-medium">F. vencimiento</th>
+                    <th className="py-2.5 px-3 font-medium text-center">Cuotas</th>
                     <th className="py-2.5 px-3 font-medium text-right">Monto</th>
                     <th className="py-2.5 px-3 font-medium text-right">Cobrado</th>
                     <th className="py-2.5 px-3 font-medium text-right">Saldo</th>
@@ -185,6 +208,26 @@ export function EstadoCuentaClienteBlock({
                         <td className="py-2.5 px-3 font-mono font-medium text-gray-800">{x.numero_venta ?? "—"}</td>
                         <td className="py-2.5 px-3 text-gray-600">{fmtFecha(x.fecha_emision)}</td>
                         <td className={`py-2.5 px-3 ${x.vencida ? "font-semibold text-red-600" : "text-gray-600"}`}>{fmtFecha(x.fecha_vencimiento)}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          {x.plan ? (
+                            <button
+                              type="button"
+                              onClick={() => setVerCuotas((p) => ({ ...p, [x.id]: !p[x.id] }))}
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                              title="Ver el detalle de las cuotas"
+                            >
+                              <span className="tabular-nums">{x.plan.cuotas_pagadas}/{x.plan.total_cuotas}</span>
+                              {x.plan.cuotas_vencidas > 0 && (
+                                <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700">
+                                  {x.plan.cuotas_vencidas} vencida{x.plan.cuotas_vencidas === 1 ? "" : "s"}
+                                </span>
+                              )}
+                              {verCuotas[x.id] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 text-right tabular-nums">{fmtGs(x.total)}</td>
                         <td className="py-2.5 px-3 text-right tabular-nums text-emerald-700">{fmtGs(x.cobrado)}</td>
                         <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-amber-600">{fmtGs(x.saldo)}</td>
@@ -209,10 +252,65 @@ export function EstadoCuentaClienteBlock({
                       </tr>
                     );
                   })}
+                  {/* Detalle de cuotas: se intercala debajo de su cuenta. */}
+                  {movs.flatMap((x) =>
+                    x.plan && verCuotas[x.id] && (x.cuotas?.length ?? 0) > 0
+                      ? [
+                          <tr key={`${x.id}-cuotas`} className="bg-slate-50/70">
+                            <td colSpan={11} className="px-3 py-3 sm:px-4">
+                              <p className="mb-2 text-xs font-semibold text-slate-600">
+                                Cuotas de {x.numero_venta ?? "la venta"} — pagó {x.plan.cuotas_pagadas} de {x.plan.total_cuotas},
+                                {x.plan.cuotas_pendientes > 0
+                                  ? ` le faltan ${x.plan.cuotas_pendientes}`
+                                  : " no le queda ninguna"}
+                                {x.plan.proxima_vencimiento && (
+                                  <span className="font-normal text-slate-500">
+                                    {" "}· próxima: cuota {x.plan.proxima_numero} de {fmtGs(x.plan.proxima_monto ?? 0)} el {fmtFecha(x.plan.proxima_vencimiento)}
+                                  </span>
+                                )}
+                              </p>
+                              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                <table className="w-full min-w-[520px] text-left text-xs">
+                                  <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                                    <tr>
+                                      <th className="px-3 py-2 font-medium">Cuota</th>
+                                      <th className="px-3 py-2 font-medium">Vence</th>
+                                      <th className="px-3 py-2 font-medium text-right">Monto</th>
+                                      <th className="px-3 py-2 font-medium text-right">Pagado</th>
+                                      <th className="px-3 py-2 font-medium text-right">Saldo</th>
+                                      <th className="px-3 py-2 font-medium">Estado</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {(x.cuotas ?? []).map((q) => {
+                                      const estadoVisQ = q.vencida ? "vencido" : q.estado === "pagada" ? "pagado" : q.estado;
+                                      return (
+                                        <tr key={q.numero_cuota}>
+                                          <td className="px-3 py-2 font-medium text-slate-700">{q.numero_cuota}/{x.plan?.total_cuotas}</td>
+                                          <td className={`px-3 py-2 ${q.vencida ? "font-semibold text-red-600" : "text-slate-600"}`}>{fmtFecha(q.fecha_vencimiento)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums">{fmtGs(q.monto)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{fmtGs(q.monto - q.saldo)}</td>
+                                          <td className={`px-3 py-2 text-right tabular-nums ${q.saldo > 0 ? "font-semibold text-amber-600" : "text-slate-400"}`}>{fmtGs(q.saldo)}</td>
+                                          <td className="px-3 py-2">
+                                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${ESTADO_BADGE[estadoVisQ] ?? ESTADO_BADGE.pendiente}`}>
+                                              {estadoVisQ.charAt(0).toUpperCase() + estadoVisQ.slice(1)}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>,
+                        ]
+                      : []
+                  )}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50/90">
-                    <td colSpan={4} className="px-3 py-2.5 text-xs text-slate-500 sm:px-4">
+                    <td colSpan={5} className="px-3 py-2.5 text-xs text-slate-500 sm:px-4">
                       <span className="font-semibold text-slate-700">{m.cuentas}</span> cuenta{m.cuentas === 1 ? "" : "s"}
                     </td>
                     <td className="px-3 py-2.5 text-right">
