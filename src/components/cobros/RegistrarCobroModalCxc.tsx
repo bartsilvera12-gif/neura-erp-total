@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { formatFechaDdMmAaaa } from "@/lib/fechas/calendario";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 
 /** Cuenta por cobrar mínima para registrar un pago. */
@@ -12,6 +13,14 @@ export type CxcRef = {
   saldo: number;
   moneda?: string;
   cliente_nombre?: string | null;
+  /** Plan de cuotas, cuando la venta se hizo en cuotas. Null en las viejas. */
+  plan?: {
+    total_cuotas: number;
+    cuotas_pagadas: number;
+    proxima_numero: number | null;
+    proxima_saldo: number | null;
+    proxima_vencimiento: string | null;
+  } | null;
 };
 
 type Entidad = { id: string; codigo: string | null; nombre: string; tipo: string | null };
@@ -53,7 +62,11 @@ export function RegistrarCobroModalCxc({
 
   useEffect(() => {
     if (open && cuenta) {
-      setMonto(String(cuenta.saldo));
+      // Lo que se cobra habitualmente es la cuota del mes, no la deuda entera:
+      // arrancar con el saldo total obligaba al cajero a borrarlo y tipear el
+      // monto de la cuota de memoria.
+      const cuota = cuenta.plan?.proxima_saldo ?? null;
+      setMonto(String(cuota != null && cuota > 0 ? cuota : cuenta.saldo));
       setMetodo("efectivo");
       setReferencia("");
       setTitular("");
@@ -75,6 +88,9 @@ export function RegistrarCobroModalCxc({
   if (!open || !cuenta) return null;
 
   const pideBanco = metodo === "transferencia" || metodo === "tarjeta";
+  /** Monto de la próxima cuota pendiente: lo que el cajero cobra casi siempre. */
+  const cuotaSugerida =
+    cuenta?.plan?.proxima_saldo != null && cuenta.plan.proxima_saldo > 0 ? cuenta.plan.proxima_saldo : null;
   // Para transferencia: banco/billetera. Para tarjeta: procesadora/tarjeta/banco.
   const entidadesFiltradas = entidades.filter((e) => {
     if (metodo === "transferencia") return e.tipo === "banco" || e.tipo === "billetera" || e.tipo == null;
@@ -132,6 +148,13 @@ export function RegistrarCobroModalCxc({
           <h3 className="text-base font-semibold text-gray-900">{cobroOk ? "Pago registrado" : "Registrar pago"}</h3>
           <p className="text-xs text-gray-500">
             {cuenta.numero_venta ?? "Cuenta"}{cuenta.cliente_nombre ? ` · ${cuenta.cliente_nombre}` : ""} · Saldo {fmtGs(cuenta.saldo, cuenta.moneda)}
+            {cuenta.plan && cuenta.plan.proxima_numero != null && (
+              <span className="mt-0.5 block text-[#3F8E91]">
+                Próxima: cuota {cuenta.plan.proxima_numero} de {cuenta.plan.total_cuotas}
+                {cuenta.plan.proxima_vencimiento ? ` · vence ${formatFechaDdMmAaaa(cuenta.plan.proxima_vencimiento)}` : ""}
+                {` · pagó ${cuenta.plan.cuotas_pagadas} de ${cuenta.plan.total_cuotas}`}
+              </span>
+            )}
           </p>
         </div>
 
@@ -172,8 +195,29 @@ export function RegistrarCobroModalCxc({
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Monto a cobrar</label>
                 <input type="number" min="0" step="1" value={monto} onChange={(e) => setMonto(e.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
-                <button type="button" onClick={() => setMonto(String(cuenta.saldo))} className="mt-1 text-xs text-[#4FAEB2] hover:underline">Cobrar saldo total</button>
-                <p className="mt-1 text-[11px] text-slate-500">Si cobrás menos que el saldo, la cuenta sigue pendiente con la diferencia.</p>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {cuotaSugerida != null && (
+                    <button
+                      type="button"
+                      onClick={() => setMonto(String(cuotaSugerida))}
+                      className="rounded-md border border-[#4FAEB2]/40 bg-[#4FAEB2]/10 px-2.5 py-1 text-xs font-semibold text-[#3F8E91] hover:bg-[#4FAEB2]/20"
+                    >
+                      Cobrar cuota {cuenta.plan?.proxima_numero} · {fmtGs(cuotaSugerida, cuenta.moneda)}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setMonto(String(cuenta.saldo))}
+                    className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Cobrar saldo total · {fmtGs(cuenta.saldo, cuenta.moneda)}
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  {cuenta.plan && cuenta.plan.proxima_numero != null
+                    ? `Si cobrás de más, la diferencia se adelanta a las cuotas siguientes.`
+                    : "Si cobrás menos que el saldo, la cuenta sigue pendiente con la diferencia."}
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Método de pago</label>

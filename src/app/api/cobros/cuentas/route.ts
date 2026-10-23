@@ -50,6 +50,46 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Plan de cuotas de cada cuenta: cuál es la próxima a cobrar y cuánto.
+    // Sin esto, Cobranzas solo conocía el saldo total y el cajero tenía que
+    // acordarse de memoria de cuánto era la cuota del mes.
+    const cxcIds = rows.map((r) => String(r.id));
+    const planPorCuenta = new Map<string, {
+      total_cuotas: number;
+      cuotas_pagadas: number;
+      proxima_numero: number | null;
+      proxima_saldo: number | null;
+      proxima_vencimiento: string | null;
+    }>();
+    if (cxcIds.length > 0) {
+      const cuoQ = await ctx.supabase
+        .from("venta_cuotas")
+        .select("cuenta_por_cobrar_id, numero_cuota, monto, saldo, fecha_vencimiento")
+        .eq("empresa_id", empresaId)
+        .in("cuenta_por_cobrar_id", cxcIds)
+        .neq("estado", "anulada")
+        .order("numero_cuota", { ascending: true });
+      // Sin la tabla todavía, Cobranzas sigue funcionando contra el saldo total.
+      if (!cuoQ.error) {
+        const porCuenta = new Map<string, Record<string, unknown>[]>();
+        for (const c of (cuoQ.data ?? []) as Record<string, unknown>[]) {
+          const k = String(c.cuenta_por_cobrar_id);
+          porCuenta.set(k, [...(porCuenta.get(k) ?? []), c]);
+        }
+        for (const [k, lista] of porCuenta) {
+          const pagadas = lista.filter((c) => (Number(c.saldo) || 0) <= 0.009).length;
+          const prox = lista.find((c) => (Number(c.saldo) || 0) > 0.009) ?? null;
+          planPorCuenta.set(k, {
+            total_cuotas: lista.length,
+            cuotas_pagadas: pagadas,
+            proxima_numero: prox ? Number(prox.numero_cuota) : null,
+            proxima_saldo: prox ? Math.round(Number(prox.saldo) || 0) : null,
+            proxima_vencimiento: prox ? String(prox.fecha_vencimiento ?? "").slice(0, 10) : null,
+          });
+        }
+      }
+    }
+
     const cuentas = rows.map((r) => {
       const venc = r.fecha_vencimiento ? String(r.fecha_vencimiento).slice(0, 10) : null;
       const vencida = (r.estado === "pendiente" || r.estado === "parcial") && venc != null && venc < hoy;
@@ -59,6 +99,7 @@ export async function GET(request: NextRequest) {
         saldo: Number(r.saldo) || 0,
         cliente_nombre: nombreById.get(String(r.cliente_id)) ?? "Cliente",
         vencida,
+        plan: planPorCuenta.get(String(r.id)) ?? null,
       };
     });
 

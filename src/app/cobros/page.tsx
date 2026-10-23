@@ -27,6 +27,14 @@ type Cuenta = {
   saldo: number;
   estado: string;
   vencida: boolean;
+  /** Plan de cuotas de la venta. Null en las cuentas de un solo vencimiento. */
+  plan?: {
+    total_cuotas: number;
+    cuotas_pagadas: number;
+    proxima_numero: number | null;
+    proxima_saldo: number | null;
+    proxima_vencimiento: string | null;
+  } | null;
 };
 type Cobro = {
   id: string;
@@ -219,6 +227,7 @@ export default function CobranzasPage() {
                     <th className="py-3 px-4 font-medium">Venta</th>
                     <th className="py-3 px-4 font-medium">Emisión</th>
                     <th className="py-3 px-4 font-medium">Vencimiento</th>
+                    <th className="py-3 px-4 font-medium text-center">Cuotas</th>
                     <th className="py-3 px-4 font-medium text-right">Total</th>
                     <th className="py-3 px-4 font-medium text-right">Cobrado</th>
                     <th className="py-3 px-4 font-medium text-right">Saldo</th>
@@ -233,6 +242,20 @@ export default function CobranzasPage() {
                       <td className="py-3 px-4 font-mono font-medium text-gray-800">{c.numero_venta ?? "—"}</td>
                       <td className="py-3 px-4 text-gray-600">{fmtFecha(c.fecha_emision)}</td>
                       <td className={`py-3 px-4 ${c.vencida ? "font-semibold text-red-600" : "text-gray-600"}`}>{fmtFecha(c.fecha_vencimiento)}</td>
+                      <td className="py-3 px-4 text-center">
+                        {c.plan && c.plan.proxima_numero != null ? (
+                          <span className="inline-flex flex-col leading-tight">
+                            <span className="text-xs font-semibold tabular-nums text-slate-700">
+                              {c.plan.cuotas_pagadas}/{c.plan.total_cuotas}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              cuota {c.plan.proxima_numero}: {fmtGs(c.plan.proxima_saldo ?? 0, c.moneda)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-right tabular-nums">{fmtGs(c.total, c.moneda)}</td>
                       <td className="py-3 px-4 text-right tabular-nums text-emerald-700">{fmtGs(c.total - c.saldo, c.moneda)}</td>
                       <td className="py-3 px-4 text-right tabular-nums font-semibold text-amber-600">{fmtGs(c.saldo, c.moneda)}</td>
@@ -249,7 +272,7 @@ export default function CobranzasPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50/90">
-                    <td colSpan={4} className="px-4 py-3">
+                    <td colSpan={5} className="px-4 py-3">
                       <p className="text-xs font-semibold text-slate-700">Suma de la vista</p>
                       <p className="text-[11px] text-slate-500">{pendientes.length} registro{pendientes.length === 1 ? "" : "s"} · recalcula al cambiar fechas o pestaña</p>
                     </td>
@@ -342,7 +365,7 @@ export default function CobranzasPage() {
       {/* Modal registrar pago (componente compartido con campos de Transferencia/Tarjeta) */}
       <RegistrarCobroModalCxc
         open={!!cobrando}
-        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, moneda: cobrando.moneda, cliente_nombre: cobrando.cliente_nombre } : null}
+        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, moneda: cobrando.moneda, cliente_nombre: cobrando.cliente_nombre, plan: cobrando.plan ?? null } : null}
         onClose={() => setCobrando(null)}
         onExito={async () => { setToast("Pago registrado"); setTimeout(() => setToast(null), 2800); await cargar(); }}
       />

@@ -24,7 +24,7 @@ type Plan = {
   cuotas_vencidas: number;
   proxima_numero: number | null;
   proxima_vencimiento: string | null;
-  proxima_monto: number | null;
+  proxima_saldo: number | null;
 };
 type Mov = {
   id: string;
@@ -241,7 +241,7 @@ export default function EstadoCuentaPage() {
                           {m.plan.cuotas_pendientes > 0 ? ` le faltan ${m.plan.cuotas_pendientes}` : " no le queda ninguna"}
                           {m.plan.proxima_vencimiento && (
                             <span className="font-normal text-slate-500">
-                              {" "}· próxima: cuota {m.plan.proxima_numero} de {fmtGs(m.plan.proxima_monto ?? 0)} el {fmtFecha(m.plan.proxima_vencimiento)}
+                              {" "}· próxima: cuota {m.plan.proxima_numero} de {fmtGs(m.plan.proxima_saldo ?? 0)} el {fmtFecha(m.plan.proxima_vencimiento)}
                             </span>
                           )}
                         </p>
@@ -342,7 +342,7 @@ export default function EstadoCuentaPage() {
 
       <RegistrarCobroModalCxc
         open={!!cobrando}
-        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, cliente_nombre: cliente?.nombre ?? null } : null}
+        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, cliente_nombre: cliente?.nombre ?? null, plan: cobrando.plan ?? null } : null}
         onClose={() => setCobrando(null)}
         onExito={async () => { setToast("Cobro registrado"); setTimeout(() => setToast(null), 2800); await cargar(); }}
       />

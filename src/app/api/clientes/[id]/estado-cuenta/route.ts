@@ -132,7 +132,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
           cuotas_vencidas: cuotas.filter((q) => q.vencida).length,
           proxima_numero: proxima?.numero_cuota ?? null,
           proxima_vencimiento: proxima?.fecha_vencimiento ?? null,
-          proxima_monto: proxima ? Math.round(proxima.saldo) : null,
+          proxima_saldo: proxima ? Math.round(proxima.saldo) : null,
         },
       };
     });

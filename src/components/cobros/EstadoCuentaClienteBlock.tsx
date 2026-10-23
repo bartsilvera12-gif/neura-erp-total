@@ -20,7 +20,7 @@ type Plan = {
   cuotas_vencidas: number;
   proxima_numero: number | null;
   proxima_vencimiento: string | null;
-  proxima_monto: number | null;
+  proxima_saldo: number | null;
 };
 type Mov = {
   id: string;
@@ -242,7 +242,7 @@ export function EstadoCuentaClienteBlock({
                             <span className="text-xs text-gray-400">—</span>
                           ) : (
                             <button
-                              onClick={() => setCobrando({ id: x.id, numero_venta: x.numero_venta, saldo: x.saldo })}
+                              onClick={() => setCobrando({ id: x.id, numero_venta: x.numero_venta, saldo: x.saldo, plan: x.plan ?? null })}
                               className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91]"
                             >
                               Cobrar
@@ -265,7 +265,7 @@ export function EstadoCuentaClienteBlock({
                                   : " no le queda ninguna"}
                                 {x.plan.proxima_vencimiento && (
                                   <span className="font-normal text-slate-500">
-                                    {" "}· próxima: cuota {x.plan.proxima_numero} de {fmtGs(x.plan.proxima_monto ?? 0)} el {fmtFecha(x.plan.proxima_vencimiento)}
+                                    {" "}· próxima: cuota {x.plan.proxima_numero} de {fmtGs(x.plan.proxima_saldo ?? 0)} el {fmtFecha(x.plan.proxima_vencimiento)}
                                   </span>
                                 )}
                               </p>
