@@ -128,6 +128,8 @@ export async function saveVenta(
         total: datos.total,
         tipo_venta: datos.tipo_venta,
         plazo_dias: datos.plazo_dias,
+        cuotas_cantidad: datos.cuotas_cantidad ?? null,
+        entrega_inicial: datos.entrega_inicial ?? null,
         metodo_pago: datos.metodo_pago,
         cliente_id: datos.cliente_id ?? null,
         observaciones: null,
