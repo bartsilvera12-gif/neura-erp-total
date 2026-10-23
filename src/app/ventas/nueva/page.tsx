@@ -204,8 +204,6 @@ export default function NuevaVentaPage() {
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteOpen, setClienteOpen] = useState(false);
   const clienteContainerRef = useRef<HTMLDivElement>(null);
-  // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
-  const [generaNotaRemision, setGeneraNotaRemision] = useState(false);
 
   // Modal de alta rápida de cliente (crea en el módulo Clientes + lo selecciona).
   const [showCrearCliente, setShowCrearCliente] = useState(false);
@@ -215,7 +213,6 @@ export default function NuevaVentaPage() {
     setClientes((prev) => [lite, ...prev.filter((x) => x.id !== c.id)]);
     setClienteId(c.id);
     setClienteQuery("");
-    setGeneraNotaRemision(c.usa_nota_remision);
     setShowCrearCliente(false);
   }
 
@@ -948,7 +945,6 @@ export default function NuevaVentaPage() {
           vendedor_id:  vendedorId || null,
           vendedor_nombre: vendedores.find((v) => v.id === vendedorId)?.nombre ?? null,
           retencion_iva_pct: retencionPctNum,
-          genera_nota_remision: !!clienteIdFinal && generaNotaRemision,
           // Puente venta→factura: solo cuando la empresa está en modo 'sifen' y el
           // cajero eligió "Factura". El backend valida el modo de nuevo.
           emitir_factura: modoSifen && tipoDocumento === "factura",
@@ -995,17 +991,14 @@ export default function NuevaVentaPage() {
         return;
       }
 
-      // Documentos de la venta. La nota de remisión se abre además de la factura
-      // SOLO si la venta la genera (cliente con usa_nota_remision o toggle activo).
+      // Documentos de la venta.
       const v = resultado.venta;
-      const generaNota = v.genera_nota_remision === true || !!v.nota_remision_numero;
       // NO se abre automáticamente la FACTURA PREIMPRESA al finalizar: abrirla
       // RESERVA el número correlativo, y la cliente registra la venta antes de
       // confirmar la forma de pago/precio. El número debe tomarse recién al
       // imprimir de verdad → se hace desde el botón "Factura preimpresa" del
       // listado, cuando ya está lista para imprimir. Así el correlativo del
       // sistema coincide con el orden del talonario físico.
-      const remisionUrl = `/api/ventas/${v.id}/ticket?tipo=remision&auto=1`;
 
       // Si esta venta se origino desde un presupuesto, marcar el presupuesto
       // como convertido (guardando el venta_id como convertido_pedido_id).
@@ -1018,9 +1011,7 @@ export default function NuevaVentaPage() {
           });
         } catch { /* best-effort: si falla, se puede marcar a mano */ }
       }
-      // Solo se abre la nota de remisión (documento NO fiscal, no reserva número).
       // La factura preimpresa se imprime desde el listado cuando corresponda.
-      if (generaNota) { try { window.open(remisionUrl, "_blank", "noopener"); } catch {} }
       // Redirige directo al listado de ventas en lugar de mostrar el modal
       // post-venta. El cajero queda libre para registrar otra venta de
       // inmediato. El ticket sigue accesible desde el listado.
@@ -1123,7 +1114,7 @@ export default function NuevaVentaPage() {
                 {clienteSel && (
                   <button
                     type="button"
-                    onClick={() => { setClienteId(""); setClienteQuery(""); setGeneraNotaRemision(false); }}
+                    onClick={() => { setClienteId(""); setClienteQuery(""); }}
                     className="shrink-0 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
                   >
                     Quitar
@@ -1150,12 +1141,11 @@ export default function NuevaVentaPage() {
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => { setClienteId(c.id); setClienteQuery(""); setClienteOpen(false); setGeneraNotaRemision(c.usa_nota_remision); }}
+                        onClick={() => { setClienteId(c.id); setClienteQuery(""); setClienteOpen(false); }}
                         className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
                       >
                         <span className="font-medium text-gray-800">{c.label}</span>
                         {c.ruc && <span className="ml-2 text-xs text-gray-400">RUC {c.ruc}</span>}
-                        {c.usa_nota_remision && <span className="ml-2 text-[10px] rounded-full bg-sky-100 text-sky-700 px-1.5 py-0.5 font-semibold">Nota remisión</span>}
                       </button>
                     ))
                   )}
@@ -1165,25 +1155,6 @@ export default function NuevaVentaPage() {
                 Si no seleccionás cliente, la venta se registra sin cliente.
               </p>
 
-              {/* Nota de remisión: solo con cliente. Si el cliente la usa, viene activada. */}
-              {clienteSel && (
-                <div className="mt-2 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2">
-                  {clienteSel.usa_nota_remision && (
-                    <p className="mb-1.5 text-[11px] text-sky-700">
-                      Este cliente usa nota de remisión. Se generará junto al ticket.
-                    </p>
-                  )}
-                  <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={generaNotaRemision}
-                      onChange={(e) => setGeneraNotaRemision(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-[#0EA5E9] focus:ring-[#0EA5E9]"
-                    />
-                    Generar nota de remisión
-                  </label>
-                </div>
-              )}
             </div>
 
             {/* Condición: Contado / Crédito */}
