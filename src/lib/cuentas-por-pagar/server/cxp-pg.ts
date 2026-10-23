@@ -117,21 +117,31 @@ export interface RegistrarPagoInput {
   metodoPago?: string | null;
   referencia?: string | null;
   observaciones?: string | null;
+  usuarioId?: string | null;
+  usuarioNombre?: string | null;
 }
 
 /**
  * Registra un pago (parcial o total) de una cuota: inserta en pagos_proveedores,
  * baja el saldo de la cuota y recalcula el saldo/estado de la cuenta. Transaccional.
+ *
+ * El pago EN EFECTIVO además sale de la caja abierta. Es el mismo problema que
+ * tenían los cobros, del otro lado del mostrador: la compra a crédito no mueve
+ * caja al comprarse, y después se pagaba una cuota con plata del cajón sin que
+ * el arqueo la descontara. Si no hay caja abierta, el pago igual se registra y
+ * se devuelve un aviso.
  */
 export async function registrarPagoProveedor(
   schemaRaw: string,
   empresaId: string,
   input: RegistrarPagoInput
-): Promise<{ ok: true }> {
+): Promise<{ ok: true; caja_warning: string | null }> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tCuo = quoteSchemaTable(schema, "compra_cuotas");
   const tCxp = quoteSchemaTable(schema, "cuentas_por_pagar");
   const tPag = quoteSchemaTable(schema, "pagos_proveedores");
+  const tCajas = quoteSchemaTable(schema, "cajas");
+  const tCm = quoteSchemaTable(schema, "caja_movimientos");
 
   const monto = round2(Number(input.monto) || 0);
   if (monto <= 0) throw new Error("El monto del pago debe ser mayor a 0.");
@@ -145,8 +155,11 @@ export async function registrarPagoProveedor(
       cuenta_por_pagar_id: string;
       saldo: string | number;
       proveedor_id: string | null;
+      compra_numero_control: string | null;
+      proveedor_nombre: string | null;
     }>(
-      `SELECT c.id, c.cuenta_por_pagar_id, c.saldo, cx.proveedor_id
+      `SELECT c.id, c.cuenta_por_pagar_id, c.saldo, cx.proveedor_id,
+              cx.compra_numero_control, cx.proveedor_nombre
          FROM ${tCuo} c JOIN ${tCxp} cx ON cx.id = c.cuenta_por_pagar_id
         WHERE c.id = $1::uuid AND c.empresa_id = $2::uuid
         FOR UPDATE`,
@@ -190,8 +203,32 @@ export async function registrarPagoProveedor(
       [Math.max(0, saldoCuenta), estadoCuenta, cuota.cuenta_por_pagar_id]
     );
 
+    // Egreso de caja, solo si se pagó en efectivo. Dentro de la transacción: si
+    // falla, no queda un pago registrado con la caja descuadrada.
+    let cajaWarning: string | null = null;
+    if ((input.metodoPago ?? "efectivo") === "efectivo") {
+      const cajaR = await client.query<{ id: string }>(
+        `SELECT id FROM ${tCajas}
+          WHERE empresa_id = $1::uuid AND estado = 'abierta'
+          ORDER BY fecha_apertura DESC LIMIT 1`,
+        [empresaId]
+      );
+      if (cajaR.rowCount === 0) {
+        cajaWarning =
+          "El pago quedó registrado, pero no salió de ninguna caja porque no hay una abierta. Abrí la caja y cargá el egreso a mano.";
+      } else {
+        const detalle = [cuota.compra_numero_control, cuota.proveedor_nombre].filter(Boolean).join(" · ");
+        const concepto = `Pago a proveedor${detalle ? ` ${detalle}` : ""}`.slice(0, 200);
+        await client.query(
+          `INSERT INTO ${tCm} (empresa_id, caja_id, tipo, concepto, monto, medio_pago, usuario_id, usuario_email)
+           VALUES ($1::uuid, $2::uuid, 'egreso', $3, $4::numeric, 'efectivo', $5::uuid, $6)`,
+          [empresaId, cajaR.rows[0].id, concepto, monto, input.usuarioId || null, input.usuarioNombre || null]
+        );
+      }
+    }
+
     await client.query("COMMIT");
-    return { ok: true };
+    return { ok: true, caja_warning: cajaWarning };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => null);
     throw err;

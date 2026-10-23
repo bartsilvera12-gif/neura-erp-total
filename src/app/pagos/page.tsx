@@ -50,6 +50,8 @@ export default function PagosPage() {
   const [error, setError] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<"pendientes" | "vencidas" | "todas">("pendientes");
   const [pagando, setPagando] = useState<Cuota | null>(null);
+  /** El pago se registró pero no salió de ninguna caja: hay que cargarlo a mano. */
+  const [avisoCaja, setAvisoCaja] = useState<string | null>(null);
 
   const traer = useCallback(async () => {
     setCargando(true);
@@ -129,6 +131,19 @@ export default function PagosPage() {
           hint="próximos 7 días"
         />
       </div>
+
+      {avisoCaja && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{avisoCaja}</span>
+          <button
+            type="button"
+            onClick={() => setAvisoCaja(null)}
+            className="shrink-0 text-xs font-semibold text-amber-700 hover:underline"
+          >
+            Entendido
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
@@ -235,7 +250,7 @@ export default function PagosPage() {
         <ModalPago
           cuota={pagando}
           cerrar={() => setPagando(null)}
-          listo={() => { setPagando(null); void traer(); }}
+          listo={(cajaWarning) => { setPagando(null); setAvisoCaja(cajaWarning); void traer(); }}
         />
       )}
     </div>
@@ -244,7 +259,7 @@ export default function PagosPage() {
 
 function ModalPago({
   cuota, cerrar, listo,
-}: { cuota: Cuota; cerrar: () => void; listo: () => void }) {
+}: { cuota: Cuota; cerrar: () => void; listo: (cajaWarning: string | null) => void }) {
   const [monto, setMonto] = useState(String(Math.round(cuota.saldo)));
   const [fecha, setFecha] = useState(hoyISO());
   const [metodo, setMetodo] = useState<string>("transferencia");
@@ -275,7 +290,7 @@ function ModalPago({
         setError(j?.error ?? "No se pudo registrar el pago.");
         return;
       }
-      listo();
+      listo(j?.data?.caja_warning ? String(j.data.caja_warning) : null);
     } catch {
       setError("No se pudo conectar.");
     } finally {

@@ -46,16 +46,18 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
-    await registrarPagoProveedor(schema, ctx.auth.empresa_id, {
+    const res = await registrarPagoProveedor(schema, ctx.auth.empresa_id, {
       cuotaId,
       monto,
       fechaPago: typeof body?.fecha_pago === "string" ? body.fecha_pago : null,
       metodoPago: typeof body?.metodo_pago === "string" ? body.metodo_pago : null,
       referencia: typeof body?.referencia === "string" ? body.referencia : null,
       observaciones: typeof body?.observaciones === "string" ? body.observaciones : null,
+      usuarioId: ctx.auth.user?.id ?? null,
+      usuarioNombre: ctx.auth.nombre ?? ctx.auth.user?.email ?? null,
     });
 
-    return NextResponse.json(successResponse({ ok: true }));
+    return NextResponse.json(successResponse({ ok: true, caja_warning: res.caja_warning }));
   } catch (err) {
     console.error("[api/cuentas-por-pagar] POST:", err instanceof Error ? err.message : err);
     // El motor valida que el pago no supere el saldo: ese mensaje le sirve al
