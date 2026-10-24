@@ -115,8 +115,6 @@ export default function VentasPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [reimprimiendoId, setReimprimiendoId] = useState<string | null>(null);
   const [cambiarTarget, setCambiarTarget] = useState<Venta | null>(null);
-  /** Agregar un producto que faltó cargar. Solo ventas por ticket (sin factura). */
-  const [agregarTarget, setAgregarTarget] = useState<Venta | null>(null);
   const [devolucionesOn, setDevolucionesOn] = useState(false);
   const [devolverVentaId, setDevolverVentaId] = useState<string | null>(null);
   // El usuario Armando (armando@admin.com) no edita ventas: se le oculta el botón "Editar".
@@ -534,16 +532,6 @@ export default function VentasPage() {
                               Editar
                             </button>
                           )}
-                          {!isAnulada && !ocultarEditar && !v.factura_id && v.tipo_venta !== "CREDITO" && (
-                            <button
-                              type="button"
-                              onClick={() => setAgregarTarget(v)}
-                              className="inline-flex items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
-                              title="Agregar un producto que faltó cargar (ajusta stock, IVA, total y caja). Solo en ventas por ticket, sin factura."
-                            >
-                              Agregar producto
-                            </button>
-                          )}
                           {!isAnulada && !ocultarEditar && (
                             <button
                               type="button"
@@ -620,16 +608,6 @@ export default function VentasPage() {
           onClose={() => setEditarTarget(null)}
           onDone={() => {
             setEditarTarget(null);
-            setReloadKey((k) => k + 1);
-          }}
-        />
-      )}
-      {agregarTarget && (
-        <AgregarProductoModal
-          venta={agregarTarget}
-          onClose={() => setAgregarTarget(null)}
-          onDone={() => {
-            setAgregarTarget(null);
             setReloadKey((k) => k + 1);
           }}
         />
@@ -841,12 +819,7 @@ function EditarVentaModal({
         <div className="border-b border-slate-100 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent px-5 py-4">
           <h3 className="text-base font-bold text-slate-800">Editar venta {venta.numero_control}</h3>
           <p className="mt-1 text-xs text-slate-500">
-            Cambia el cliente, el vendedor, las observaciones y el N.º de factura. No modifica productos, cantidades ni montos.
-          </p>
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            {venta.factura_id
-              ? "Para cambiar los productos de una venta ya facturada hay que cancelar la factura o emitir una nota de crédito."
-              : "¿Faltó cargar algo? Usá «Agregar producto» o «Cambiar producto» en la fila de la venta."}
+            Cliente, vendedor, observaciones y N.º de factura. Abajo se pueden agregar productos que faltaron.
           </p>
         </div>
         <div className="p-5 space-y-4">
@@ -897,6 +870,8 @@ function EditarVentaModal({
                 : "Asigná el N.º de la factura física (para facturas viejas sin número). Escribí solo el número; no puede repetir uno ya usado."}
             </span>
           </label>
+          <AgregarProductoEnVenta venta={venta} onAgregado={onDone} />
+
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Observaciones</span>
             <textarea
@@ -1236,14 +1211,16 @@ function CambiarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
 }
 
 /**
- * Agregar a una venta ya registrada un producto que faltó cargar.
+ * Agregar un producto que faltó cargar, DENTRO de "Editar venta" — que es donde
+ * lo busca el cajero cuando se da cuenta de que se le pasó algo.
  *
- * Solo ventas por TICKET: si la venta emitió factura, el documento declarado
- * dejaría de coincidir con lo vendido. Eso se corrige cancelando el DE o con
- * una nota de crédito, no agregando líneas por atrás. El botón no aparece en
- * ventas con factura y el servidor lo rechaza igual.
+ * Solo ventas por TICKET al contado. Si la venta emitió factura, agregar líneas
+ * dejaría el documento declarado ante la SET distinto de lo vendido; y en
+ * crédito habría que rearmar las cuotas y la cuenta por cobrar. En esos casos
+ * el bloque no ofrece el formulario: explica por qué y qué hacer en su lugar.
  */
-function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClose: () => void; onDone: () => void }) {
+function AgregarProductoEnVenta({ venta, onAgregado }: { venta: Venta; onAgregado: () => void }) {
+  const [abierto, setAbierto] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ProdHit[]>([]);
   const [buscando, setBuscando] = useState(false);
@@ -1253,6 +1230,12 @@ function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
   const [tipoIva, setTipoIva] = useState<TipoIvaVenta>("10%");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const bloqueo = venta.factura_id
+    ? "Esta venta ya emitió factura. Para cambiar lo vendido hay que cancelar el documento electrónico o emitir una nota de crédito."
+    : venta.tipo_venta === "CREDITO"
+      ? "Esta venta es a crédito: agregar productos obligaría a rearmar las cuotas y la cuenta por cobrar. Por ahora se anula y se vuelve a cargar."
+      : null;
 
   useEffect(() => {
     const q = query.trim();
@@ -1272,27 +1255,11 @@ function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
     return () => { vivo = false; clearTimeout(t); };
   }, [query]);
 
-  function elegir(p: ProdHit) {
-    setProd(p);
-    setPrecio(Number(p.precio_venta) || 0);
-    setHits([]);
-    setQuery("");
-  }
-
   const totalLinea = Math.round((cantidad || 0) * (precio || 0));
-  // Precio con IVA INCLUIDO: elegir 10% o 5% no sube el total, cambia cuánto
-  // impuesto viene adentro.
-  const ivaIncluido =
-    tipoIva === "10%" ? Math.round(totalLinea - totalLinea / 1.1)
-    : tipoIva === "5%" ? Math.round(totalLinea - totalLinea / 1.05)
-    : 0;
-  const totalVentaNuevo = venta.total + totalLinea;
   const gs = (n: number) => `Gs. ${Math.round(n).toLocaleString("es-PY")}`;
-  const sinStock = prod != null && Number(prod.stock_actual) < cantidad;
 
   async function submit() {
     if (!prod) { setError("Elegí el producto a agregar."); return; }
-    if (!(cantidad > 0)) { setError("La cantidad debe ser mayor a 0."); return; }
     setLoading(true); setError(null);
     try {
       const r = await fetch(`/api/ventas/${venta.id}/agregar-producto`, {
@@ -1303,7 +1270,7 @@ function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.success === false) throw new Error(j?.error ?? "No se pudo agregar el producto.");
       alert(`Producto agregado. Cobrá ${gs(Number(j?.diferencia ?? totalLinea))} más al cliente.`);
-      onDone();
+      onAgregado();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo agregar el producto.");
     } finally {
@@ -1311,34 +1278,55 @@ function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-transparent px-5 py-4">
-          <h3 className="text-base font-bold text-slate-800">Agregar producto · {venta.numero_control}</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Para lo que faltó cargar. Ajusta stock, IVA, total y la caja del día.
-          </p>
-          <p className="mt-1.5 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-            Solo en ventas por ticket. Si la venta ya emitió factura hay que cancelarla o hacer una nota de crédito.
-          </p>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto p-5 space-y-4">
-          <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Total actual de la venta: <b>{gs(venta.total)}</b>
-          </div>
+  if (bloqueo) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+        <p className="text-sm font-medium text-slate-700">Productos</p>
+        <p className="mt-1 text-[11px] text-slate-500">{bloqueo}</p>
+      </div>
+    );
+  }
 
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-slate-700">Productos</p>
+          <p className="text-[11px] text-slate-500">Total actual: {gs(venta.total)}</p>
+        </div>
+        {!abierto && (
+          <button
+            type="button"
+            onClick={() => setAbierto(true)}
+            className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+          >
+            Agregar producto
+          </button>
+        )}
+      </div>
+
+      {abierto && (
+        <div className="mt-3 space-y-3">
           {!prod ? (
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Producto a agregar</span>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar por nombre o SKU…" disabled={loading}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
+              <span className="text-[11px] font-medium text-slate-600">Buscar el producto que faltó</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Nombre o SKU…"
+                disabled={loading}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              />
               {buscando && <p className="mt-1 text-[11px] text-slate-400">Buscando…</p>}
               {hits.length > 0 && (
-                <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
                   {hits.map((p) => (
-                    <button key={p.id} type="button" onClick={() => elegir(p)}
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-emerald-50">
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => { setProd(p); setPrecio(Number(p.precio_venta) || 0); setHits([]); setQuery(""); }}
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-emerald-50"
+                    >
                       <span className="font-medium text-slate-800">{p.nombre}</span>
                       <span className="block text-[11px] text-slate-500">{p.sku} · {gs(p.precio_venta)} · stock {p.stock_actual}</span>
                     </button>
@@ -1347,8 +1335,8 @@ function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
               )}
             </label>
           ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <>
+              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-white px-3 py-2">
                 <span className="text-sm font-semibold text-emerald-800">{prod.nombre}</span>
                 <button type="button" onClick={() => setProd(null)} className="text-xs text-emerald-700 hover:underline">Cambiar</button>
               </div>
@@ -1377,37 +1365,23 @@ function AgregarProductoModal({ venta, onClose, onDone }: { venta: Venta; onClos
                   </select>
                 </label>
               </div>
-              {sinStock && (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                  Quedan {prod.stock_actual} en stock y se piden {cantidad}. El servidor va a rechazarlo.
-                </p>
-              )}
-              <div className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <Fila label="Total de la línea" value={gs(totalLinea)} />
-                <Fila
-                  label={tipoIva === "EXENTA" ? "Exenta de IVA" : `IVA ${tipoIva} incluido en el precio`}
-                  value={tipoIva === "EXENTA" ? "—" : gs(ivaIncluido)}
-                />
-                <Fila label="Total nuevo de la venta" value={gs(totalVentaNuevo)} />
-                <div className="mt-1 flex items-center justify-between font-semibold text-emerald-700">
-                  <span>A cobrar</span>
-                  <span className="tabular-nums">{gs(totalLinea)}</span>
-                </div>
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                <span className="text-slate-600">A cobrar de más</span>
+                <span className="font-semibold tabular-nums text-emerald-700">{gs(totalLinea)}</span>
               </div>
-            </div>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={loading}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {loading ? "Agregando…" : `Agregar a ${venta.numero_control}`}
+              </button>
+            </>
           )}
-
-          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} disabled={loading}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
-            <button type="button" onClick={submit} disabled={loading || !prod}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-              {loading ? "Agregando…" : "Agregar producto"}
-            </button>
-          </div>
+          {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
         </div>
-      </div>
+      )}
     </div>
   );
 }
