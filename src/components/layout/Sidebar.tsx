@@ -24,6 +24,7 @@ import {
   BarChart3,
   Wallet,
   Banknote,
+  UsersRound,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -88,6 +89,8 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Líneas de producto", href: "/inventario/lineas" },
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
+  // Portado de Amasso: panel de mostrador para ver todo lo de un cliente junto.
+  { key: "gestion_clientes", slug: "gestion-clientes", label: "Gestión Clientes", href: "/gestion-clientes", icon: UsersRound },
   // Pedidos que entran por la tienda online. El tablero sale del ERP de
   // MANASTINA; la vista que lo alimenta la crea 07_pedidos_web_en_el_erp.sql.
   { key: "pedidos_web", slug: "pedidos-web", label: "Pedidos web", href: "/pedidos-web", icon: ShoppingBag },
@@ -133,7 +136,7 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["ventas", "clientes", "pedidos_web"] },
+  { id: "comercial", titulo: "Comercial", keys: ["ventas", "clientes", "gestion_clientes", "pedidos_web"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["cobranzas", "pagos", "gastos", "notas_credito", "gerencia", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras"] },
   { id: "administracion", titulo: "Administración", keys: ["usuarios", "configuracion"] },
