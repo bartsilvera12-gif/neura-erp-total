@@ -30,6 +30,9 @@ export default function VentasReportePage() {
   const [cargando, setCargando] = useState(true);
   /** Filtro del detalle: qué producto se llevaron y cuándo. */
   const [buscar, setBuscar] = useState("");
+  /** El detalle vivía al final de la página y no se encontraba. Ahora son
+   *  pestañas, igual que en el reporte de Compras. */
+  const [vista, setVista] = useState<"resumen" | "detalle">("resumen");
 
   useEffect(() => {
     let cancel = false;
@@ -93,6 +96,26 @@ export default function VentasReportePage() {
             </div>
           </div>
 
+          {/* Pestañas: el resumen y el detalle línea por línea. */}
+          <div className="flex items-center gap-1 border-b border-slate-200">
+            <button
+              type="button"
+              onClick={() => setVista("resumen")}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${vista === "resumen" ? "border-[#4FAEB2] text-[#3F8E91]" : "border-transparent text-slate-500 hover:text-[#3F8E91]"}`}
+            >
+              Resumen ({data.ventas.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setVista("detalle")}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${vista === "detalle" ? "border-[#4FAEB2] text-[#3F8E91]" : "border-transparent text-slate-500 hover:text-[#3F8E91]"}`}
+            >
+              Detalle por producto ({data.items.length})
+            </button>
+          </div>
+
+          {vista === "resumen" && (
+          <>
           {/* Detalle de ventas */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
             <h2 className="text-base font-semibold text-slate-800 mb-4">Ventas del mes</h2>
@@ -157,8 +180,12 @@ export default function VentasReportePage() {
             )}
           </div>
 
-          {/* Detalle por producto: el dato ya se calculaba, pero la pantalla solo
-              mostraba totales. Acá se ve qué se llevó cada venta y en qué fecha. */}
+          </>
+          )}
+
+          {vista === "detalle" && (
+          /* El dato ya se calculaba, pero la pantalla solo mostraba totales.
+             Acá se ve qué se llevó cada venta y en qué fecha. */
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -220,6 +247,7 @@ export default function VentasReportePage() {
               </div>
             )}
           </div>
+          )}
         </>
       )}
     </div>

@@ -35,6 +35,11 @@ export default function EditarProductoPage() {
 
   // descripcion live separately because form se inicializa al cargar
   const [descripcion, setDescripcion] = useState("");
+  /** Unidades a sumar o restar con los botones. No es el stock: es el delta. */
+  const [ajusteCantidad, setAjusteCantidad] = useState(1);
+  /** Stock con el que se abrió la pantalla, para mostrar "28 → 33 (+5)". */
+  const [stockOriginal, setStockOriginal] = useState<number | null>(null);
+
   const [form, setForm] = useState({
     nombre: "",
     sku: "",
@@ -221,6 +226,7 @@ export default function EditarProductoPage() {
         unidad_medida: p.unidad_medida,
         metodo_valuacion: p.metodo_valuacion,
       });
+      setStockOriginal(Number(p.stock_actual) || 0);
       setCodigoOriginal(p.codigo_barras ?? null);
       setImagenPath(p.imagen_path ?? null);
       setImagenUrl(p.imagen_url ?? null);
@@ -270,6 +276,14 @@ export default function EditarProductoPage() {
     });
     return () => { cancelled = true; };
   }, [id]);
+
+  /** Suma (o resta) unidades al stock actual sin pisar el total a mano. */
+  function ajustarStock(delta: number) {
+    setForm((f) => {
+      const actual = parseInt(f.stock_actual, 10) || 0;
+      return { ...f, stock_actual: String(Math.max(0, actual + delta)) };
+    });
+  }
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -1159,8 +1173,49 @@ export default function EditarProductoPage() {
                 min={0}
                 required={showStock}
               />
-              <p className="mt-1 text-xs text-gray-400">
-                Para ajustes de stock, preferí registrar un <Link href="/inventario/movimientos/nuevo" className="underline">movimiento</Link>.
+              {/* Sumar o restar unidades sin tener que calcular el total nuevo.
+                  Antes había que leer el stock, hacer la cuenta de cabeza y
+                  escribir el resultado: cargar 5 unidades sobre 28 obligaba a
+                  tipear 33, y un error ahí pisa el inventario entero. */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-gray-500">Cargar o descontar:</span>
+                <div className="inline-flex items-center rounded-lg border border-slate-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => ajustarStock(-ajusteCantidad)}
+                    className="px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                    aria-label="Descontar del stock"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    value={ajusteCantidad}
+                    onChange={(e) => setAjusteCantidad(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="w-16 border-x border-slate-200 px-2 py-1.5 text-center text-sm tabular-nums outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => ajustarStock(ajusteCantidad)}
+                    className="px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                    aria-label="Agregar al stock"
+                  >
+                    +
+                  </button>
+                </div>
+                {stockOriginal != null && (parseInt(form.stock_actual) || 0) !== stockOriginal && (
+                  <span className="text-xs font-medium text-[#3F8E91]">
+                    {stockOriginal} → {parseInt(form.stock_actual) || 0}
+                    {" "}({(parseInt(form.stock_actual) || 0) > stockOriginal ? "+" : ""}
+                    {(parseInt(form.stock_actual) || 0) - stockOriginal})
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-xs text-gray-400">
+                Al guardar queda registrado como ajuste manual en{" "}
+                <Link href="/inventario/movimientos" className="underline">Movimientos</Link>.
               </p>
             </div>
             <div>
