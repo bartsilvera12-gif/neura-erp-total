@@ -534,7 +534,7 @@ export default function VentasPage() {
                               Editar
                             </button>
                           )}
-                          {!isAnulada && !ocultarEditar && !v.factura_id && (
+                          {!isAnulada && !ocultarEditar && !v.factura_id && v.tipo_venta !== "CREDITO" && (
                             <button
                               type="button"
                               onClick={() => setAgregarTarget(v)}

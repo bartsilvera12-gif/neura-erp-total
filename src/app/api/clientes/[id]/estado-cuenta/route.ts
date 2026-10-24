@@ -43,6 +43,26 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     if (vq.error) throw new Error(vq.error.message);
     const totalVendido = ((vq.data ?? []) as Record<string, unknown>[]).reduce((acc, r) => acc + (Number(r.total) || 0), 0);
 
+    // Cobros del cliente. Se traen antes que las cuentas porque lo cobrado de
+    // cada una se calcula sumando SUS cobros, no restando el saldo: al anular
+    // una cuenta el saldo se pone en cero, y "total − saldo" mostraba la deuda
+    // entera como si el cliente la hubiera pagado.
+    const cobQ = await ctx.supabase
+      .from("cobros_clientes")
+      .select("id, cuenta_por_cobrar_id, venta_id, fecha_pago, monto, metodo_pago, referencia")
+      .eq("empresa_id", empresaId)
+      .eq("cliente_id", id)
+      .order("fecha_pago", { ascending: false })
+      .limit(500);
+    if (cobQ.error) throw new Error(cobQ.error.message);
+    const cobros = (cobQ.data ?? []) as Record<string, unknown>[];
+    const cobradoPorCuenta = new Map<string, number>();
+    for (const c of cobros) {
+      const k = String(c.cuenta_por_cobrar_id ?? "");
+      if (!k) continue;
+      cobradoPorCuenta.set(k, (cobradoPorCuenta.get(k) ?? 0) + (Number(c.monto) || 0));
+    }
+
     // Cuentas por cobrar (movimientos de crédito).
     const cxcQ = await ctx.supabase
       .from("cuentas_por_cobrar")
@@ -68,7 +88,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
         fecha_emision: r.fecha_emision ?? null,
         fecha_vencimiento: venc,
         total,
-        cobrado: Math.round((total - saldo) * 100) / 100,
+        cobrado: Math.round((cobradoPorCuenta.get(String(r.id)) ?? 0) * 100) / 100,
         saldo,
         estado: r.estado,
         vencida,
@@ -136,17 +156,6 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
         },
       };
     });
-
-    // Historial de cobros del cliente.
-    const cobQ = await ctx.supabase
-      .from("cobros_clientes")
-      .select("id, cuenta_por_cobrar_id, venta_id, fecha_pago, monto, metodo_pago, referencia")
-      .eq("empresa_id", empresaId)
-      .eq("cliente_id", id)
-      .order("fecha_pago", { ascending: false })
-      .limit(500);
-    if (cobQ.error) throw new Error(cobQ.error.message);
-    const cobros = (cobQ.data ?? []) as Record<string, unknown>[];
 
     const resumen = {
       total_vendido: Math.round(totalVendido),

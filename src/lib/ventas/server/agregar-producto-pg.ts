@@ -109,10 +109,10 @@ export async function agregarProductoVenta(
 
     // La preimpresa también es un documento con número de talonario.
     const faQ = await client.query(
-      `SELECT numero_factura FROM ${tFa} WHERE venta_id=$1::uuid AND empresa_id=$2::uuid LIMIT 1`,
+      `SELECT numero_completo FROM ${tFa} WHERE venta_id=$1::uuid AND empresa_id=$2::uuid LIMIT 1`,
       [ventaId, empresaId]
     );
-    const faNumero = faQ.rows[0] ? String((faQ.rows[0] as Record<string, unknown>).numero_factura ?? "").trim() : "";
+    const faNumero = faQ.rows[0] ? String((faQ.rows[0] as Record<string, unknown>).numero_completo ?? "").trim() : "";
     if (faNumero) {
       throw new AgregarProductoError(
         `Esta venta ya tiene el número de factura ${faNumero} del talonario. No se le pueden agregar productos.`
@@ -217,7 +217,26 @@ export async function agregarProductoVenta(
       [ventaId, Math.round(num(sums.sub)), Math.round(num(sums.iva)), totalNuevo]
     );
 
-    // 7) Detalle de pago: el cliente paga la diferencia en el mostrador.
+    // 7) Preimpresa sin número todavía: su liquidación de IVA tiene que seguir
+    //    el total. (Con número asignado ya se cortó arriba.)
+    const liqQ = await client.query(
+      `SELECT tipo_iva, total_linea, monto_iva FROM ${tItems} WHERE venta_id=$1::uuid AND empresa_id=$2::uuid`,
+      [ventaId, empresaId]
+    );
+    let g10 = 0, i10 = 0, g5 = 0, i5 = 0, ex = 0;
+    for (const r of liqQ.rows as Array<Record<string, unknown>>) {
+      const tl = num(r.total_linea), mi = num(r.monto_iva), ti = String(r.tipo_iva);
+      if (ti === "10%") { g10 += tl - mi; i10 += mi; }
+      else if (ti === "5%") { g5 += tl - mi; i5 += mi; }
+      else ex += tl;
+    }
+    await client.query(
+      `UPDATE ${tFa} SET gravado_10=$2::numeric, iva_10=$3::numeric, gravado_5=$4::numeric, iva_5=$5::numeric,
+              exentas=$6::numeric, total=$7::numeric WHERE venta_id=$1::uuid AND empresa_id=$8::uuid`,
+      [ventaId, Math.round(g10), Math.round(i10), Math.round(g5), Math.round(i5), Math.round(ex), totalNuevo, empresaId]
+    );
+
+    // 8) Detalle de pago: el cliente paga la diferencia en el mostrador.
     if (!esMixto) {
       await client.query(
         `UPDATE ${tPagos} SET monto=$2::numeric, updated_at=now() WHERE venta_id=$1::uuid AND empresa_id=$3::uuid`,

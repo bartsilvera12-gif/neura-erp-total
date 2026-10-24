@@ -144,7 +144,7 @@ export function EstadoCuentaClienteBlock({
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">Estado de cuenta</span>
           <span className="hidden text-[10px] font-normal text-slate-400 sm:inline">del cliente</span>
           <span className="hidden h-3 w-px bg-slate-200 sm:inline" />
-          <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-700 ring-1 ring-slate-200/80">{m.cuentas} cuenta{m.cuentas === 1 ? "" : "s"}</span>
+          <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-700 ring-1 ring-slate-200/80">{m.cuentas} activa{m.cuentas === 1 ? "" : "s"}</span>
           <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-700 ring-1 ring-slate-200/80">Saldo {fmtGs(m.saldoPend)}</span>
           {m.vencidas > 0 ? (
             <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700 ring-1 ring-red-200/80">{m.vencidas} venc.</span>
@@ -164,7 +164,7 @@ export function EstadoCuentaClienteBlock({
         <>
           {/* Cards de resumen */}
           <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 sm:p-4 lg:grid-cols-6">
-            <Card label="Cuentas" value={String(m.cuentas)} />
+            <Card label="Cuentas activas" value={String(m.cuentas)} />
             <Card label="Monto total" value={fmtGs(m.montoTotal)} />
             <Card label="Saldo pend." value={fmtGs(m.saldoPend)} valueClass={m.saldoPend > 0 ? "text-amber-600" : "text-emerald-600"} ring="ring-[#4FAEB2]/20" />
             <Card label="Vencidas" value={String(m.vencidas)} valueClass={m.vencidas > 0 ? "text-red-600" : "text-slate-800"} ring="ring-red-200/70" />
@@ -311,7 +311,7 @@ export function EstadoCuentaClienteBlock({
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50/90">
                     <td colSpan={5} className="px-3 py-2.5 text-xs text-slate-500 sm:px-4">
-                      <span className="font-semibold text-slate-700">{m.cuentas}</span> cuenta{m.cuentas === 1 ? "" : "s"}
+                      <span className="font-semibold text-slate-700">{m.cuentas}</span> cuenta{m.cuentas === 1 ? "" : "s"} activa{m.cuentas === 1 ? "" : "s"}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total</span>
