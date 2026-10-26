@@ -91,6 +91,8 @@ export interface Venta {
   estado?: "activa" | "anulada" | "parcialmente_devuelta" | "devuelta_total";
   anulada_at?: string | null;
   anulada_motivo?: string | null;
+  /** Nombre de quien anuló. La tabla guarda solo el id; la API lo resuelve. */
+  anulada_por_nombre?: string | null;
   /** true si la venta se originó al facturar una guarda (reservas.venta_id = id).
    *  Estas ventas NO se pueden Devolver/Anular: se gestionan desde la guarda. */
   origen_guarda?: boolean;

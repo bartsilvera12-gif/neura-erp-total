@@ -943,7 +943,8 @@ function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => vo
         {/* Meta: fecha/hora, vendedor, tipo, pago */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 sm:grid-cols-4">
           <Meta label="Fecha y hora" value={formatFecha(venta.fecha)} />
-          <Meta label="Vendedor" value={venta.vendedor_nombre ?? venta.usuario_nombre ?? "—"} />
+          <Meta label="Registró" value={venta.usuario_nombre ?? "—"} />
+          <Meta label="Vendedor" value={venta.vendedor_nombre ?? "—"} />
           <Meta
             label="Tipo"
             value={venta.tipo_venta === "CONTADO" ? "Contado" : `Crédito ${venta.plazo_dias ?? ""}d`}
@@ -959,6 +960,20 @@ function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => vo
             }
           />
         </div>
+
+        {/* Anulación: quién y cuándo. Es la otra operación que hay que poder
+            auditar cuando opera más de una persona. */}
+        {venta.estado === "anulada" && (
+          <div className="mx-5 mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+            <p className="text-xs font-semibold text-red-700">
+              Anulada{venta.anulada_por_nombre ? ` por ${venta.anulada_por_nombre}` : ""}
+              {venta.anulada_at ? ` · ${formatFecha(venta.anulada_at)}` : ""}
+            </p>
+            {venta.anulada_motivo && (
+              <p className="mt-0.5 text-[11px] text-red-600">Motivo: {venta.anulada_motivo}</p>
+            )}
+          </div>
+        )}
 
         {/* Ítems */}
         <div className="max-h-[50vh] overflow-y-auto px-5 pb-2">

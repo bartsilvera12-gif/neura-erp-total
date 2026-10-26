@@ -38,6 +38,14 @@ export default function LoginPage() {
       return;
     }
 
+    // Queda registrado quién entró y cuándo. Best-effort: si falla, el usuario
+    // entra igual — no poder anotar el ingreso no es motivo para dejarlo afuera.
+    try {
+      await fetch("/api/accesos", { method: "POST", cache: "no-store" });
+    } catch {
+      /* el registro de ingreso no bloquea el login */
+    }
+
     // Landing por acceso: quien NO tiene el módulo 'dashboard' arranca en Caja
     // (/ventas). Cubre vendedores y el rol 'usuario' con módulos limitados.
     // Admin/super_admin tienen 'dashboard' → home.

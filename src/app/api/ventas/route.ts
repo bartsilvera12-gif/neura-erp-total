@@ -199,6 +199,26 @@ export async function GET(request: NextRequest) {
       byVenta.set(row.venta_id, list);
     }
 
+    // Quién anuló cada venta: la tabla guarda solo el id. Con más de un usuario
+    // operando, "anulada" sin nombre no sirve para auditar nada.
+    const anuladoPorIds = [...new Set(
+      (ventasRows as unknown as Array<{ anulada_por?: string | null }>)
+        .map((r) => (r.anulada_por ? String(r.anulada_por) : ""))
+        .filter(Boolean)
+    )];
+    const nombrePorUsuarioId = new Map<string, string>();
+    if (anuladoPorIds.length > 0) {
+      const uq = await ctx.supabase
+        .from("usuarios")
+        .select("id, nombre, email")
+        .eq("empresa_id", empresaId)
+        .in("id", anuladoPorIds);
+      for (const u of ((uq.data ?? []) as Record<string, unknown>[])) {
+        const n = String(u.nombre ?? "").trim() || String(u.email ?? "").trim();
+        if (n) nombrePorUsuarioId.set(String(u.id), n);
+      }
+    }
+
     const ventas: Venta[] = ventasRows.map((r) => {
       const lineRows = byVenta.get(r.id) ?? [];
       return {
