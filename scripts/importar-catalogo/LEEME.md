@@ -12,13 +12,25 @@ De esas filas entran **3.391 productos**:
 El `DESCUENTO` venía con precio **−619.000**: si entraba como producto, los
 reportes de margen quedaban mal.
 
-## Paso 1 — cargar los productos
+## Paso 1 — cargar los productos (7 partes)
 
-`01-productos.sql` — 3.391 productos y las 5 categorías nuevas, en un solo
-DO block. Pegalo en el SQL editor.
+Partido de 500 en 500 para no ahogar el SQL editor:
 
-No está en el repo: trae la columna COSTO y el repo es público. Queda sólo en
-la máquina, en esta carpeta.
+| Archivo | Productos | Acumulado |
+|---|---|---|
+| `01-productos-01-de-07.sql` | 500 | 500 |
+| `01-productos-02-de-07.sql` | 500 | 1.000 |
+| `01-productos-03-de-07.sql` | 500 | 1.500 |
+| `01-productos-04-de-07.sql` | 500 | 2.000 |
+| `01-productos-05-de-07.sql` | 500 | 2.500 |
+| `01-productos-06-de-07.sql` | 500 | 3.000 |
+| `01-productos-07-de-07.sql` | 391 | 3.391 |
+
+Cada una pesa ~57 KB y al final imprime el acumulado, así que mirando ese
+número sabés en qué parte vas.
+
+No están en el repo: traen la columna COSTO y el repo es público. Quedan sólo
+en la máquina, en esta carpeta.
 
 Qué carga:
 
@@ -31,11 +43,13 @@ Qué carga:
 - **Stock = 0** en todos. La lista no trae cantidades.
 - **Categoría**: asignada por el nombre del producto (ver abajo).
 
-Es idempotente: si el SKU ya existe lo saltea. Correrlo dos veces no duplica
-nada ni pisa un precio editado a mano. Al final imprime la verificación.
+Las partes son idempotentes y no les importa el orden: cada una crea las
+categorías si faltan y saltea los SKU que ya existan. Si te perdiste y no
+sabés cuál corriste, corré las 7 de nuevo — no duplica nada ni pisa un precio
+editado a mano.
 
-> También se puede cargar por **Inventario → Importar** con `01-productos.xlsx`
-> (mismos datos, marcando "crear faltantes"). El SQL es el camino directo.
+> También se puede cargar de una por **Inventario → Importar** con
+> `01-productos.xlsx` (mismos datos, marcando "crear faltantes").
 
 ## Paso 2 — marcas y prolijidad de categorías
 

@@ -55,4 +55,4 @@ scripts/**/*.xlsx
 scripts/**/*.xls
 scripts/**/*.csv
 # El SQL del catalogo trae los costos: tampoco va al repo publico.
-scripts/importar-catalogo/01-productos.sql
+scripts/importar-catalogo/01-productos*.sql
