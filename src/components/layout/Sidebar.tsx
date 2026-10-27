@@ -25,6 +25,7 @@ import {
   Wallet,
   Banknote,
   UsersRound,
+  UserCog,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -115,7 +116,10 @@ const MENU_STRUCTURE: MenuItem[] = [
   { key: "reportes", slug: "reportes", label: "Reportes", href: "/reportes", icon: BarChart3 },
   { key: "notas_credito", slug: "notas_credito", label: "Notas de crédito", href: "/notas-credito", icon: ScrollText },
   // Tableros: el cliente lo pidio y quedo descartado a pedido suyo.
-  // Usuarios: ruta accesible por URL (/usuarios), fuera del menu a proposito.
+  // Usuarios estuvo fuera del menu mientras habia un solo usuario y era ruido.
+  // Vuelve porque ahora hay varios y desde ahi se restablecen contrasenas: no
+  // se puede pedir que el administrador escriba la direccion a mano.
+  { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
   {
     key: "configuracion",
     slug: "configuracion",
