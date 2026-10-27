@@ -12,25 +12,30 @@ De esas filas entran **3.391 productos**:
 El `DESCUENTO` venía con precio **−619.000**: si entraba como producto, los
 reportes de margen quedaban mal.
 
-## Paso 1 — importar los productos (desde el ERP, no por SQL)
+## Paso 1 — cargar los productos
 
-El ERP ya tiene importador: **Inventario → Importar**, y hay que marcar
-**"crear faltantes"** para que cree las 5 categorías nuevas.
+`01-productos.sql` — 3.391 productos y las 5 categorías nuevas, en un solo
+DO block. Pegalo en el SQL editor.
 
-Archivo: `01-productos.xlsx` (no está en el repo: trae la columna COSTO y el
-repo es público; queda sólo en la máquina).
-
-Antes de confirmar, la pantalla muestra un **preview**. Tiene que decir
-3.391 INSERT y 0 ERROR.
+No está en el repo: trae la columna COSTO y el repo es público. Queda sólo en
+la máquina, en esta carpeta.
 
 Qué carga:
 
 - **SKU** = el `IDART` del sistema viejo, tal cual. Buscando "3044" en el ERP
   aparece el mismo producto que en las listas impresas de antes.
 - **Código de barras**: la lista lo trae vacío en las 3.437 filas, así que el
-  ERP le genera uno interno (`INT-000001`…).
+  SQL pide uno a la misma secuencia que usa el ERP
+  (`total.incrementar_secuencia_producto`) y queda `INT-000001`…`INT-003391`.
+  Así no choca con los que genere el sistema después.
 - **Stock = 0** en todos. La lista no trae cantidades.
 - **Categoría**: asignada por el nombre del producto (ver abajo).
+
+Es idempotente: si el SKU ya existe lo saltea. Correrlo dos veces no duplica
+nada ni pisa un precio editado a mano. Al final imprime la verificación.
+
+> También se puede cargar por **Inventario → Importar** con `01-productos.xlsx`
+> (mismos datos, marcando "crear faltantes"). El SQL es el camino directo.
 
 ## Paso 2 — marcas y prolijidad de categorías
 
