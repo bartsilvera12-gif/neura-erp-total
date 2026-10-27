@@ -20,6 +20,10 @@ import {
   X,
   Pencil,
   Trash2,
+  Store,
+  EyeOff,
+  Star,
+  StarOff,
 } from "lucide-react";
 
 const metodoBadge: Record<MetodoValuacion, string> = {
@@ -140,6 +144,22 @@ export default function InventarioPage() {
     }
   }
   const [refreshKey, setRefreshKey] = useState(0);
+
+  /**
+   * Selección para las acciones en masa.
+   *
+   * Guarda ids, no índices de fila: así sobrevive a cambiar de página y el
+   * usuario puede juntar productos de varias páginas antes de publicarlos.
+   *
+   * `todoElFiltro` es el otro modo: "todos los que coinciden con lo que estoy
+   * viendo", sin tener los ids. Los resuelve el server con los mismos filtros.
+   * Hace falta porque el catálogo son 3.391 productos en 137 páginas y nadie
+   * va a tildar 948 checks para publicar la categoría Cocina.
+   */
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
+  const [todoElFiltro, setTodoElFiltro] = useState(false);
+  const [masivoGuardando, setMasivoGuardando] = useState(false);
+  const [masivoAviso, setMasivoAviso] = useState<string | null>(null);
 
   // Filtros / paginacion
   const [search, setSearch] = useState("");
@@ -274,6 +294,121 @@ export default function InventarioPage() {
     setSearch("");
     setCategoriaId("");
     setPage(1);
+  }
+
+  // ── Selección en masa ──────────────────────────────────────────────────────
+
+  /** Cambiar de filtro cambia el universo: una selección vieja ya no significa
+   *  lo mismo, sobre todo la de "todo el filtro". Se limpia. */
+  useEffect(() => {
+    setSeleccion(new Set());
+    setTodoElFiltro(false);
+  }, [search, categoriaId]);
+
+  const seleccionadosEnPagina = useMemo(
+    () => productosMostrados.filter((p) => seleccion.has(p.id)).length,
+    [productosMostrados, seleccion],
+  );
+  const paginaCompleta =
+    productosMostrados.length > 0 && seleccionadosEnPagina === productosMostrados.length;
+  /** Cuántos productos va a tocar realmente la acción. */
+  const cantidadAfectada = todoElFiltro ? total : seleccion.size;
+  const hayAlgoSeleccionado = cantidadAfectada > 0;
+
+  function alternarFila(id: string, marcado: boolean) {
+    setTodoElFiltro(false);
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      if (marcado) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function alternarPagina(marcado: boolean) {
+    setTodoElFiltro(false);
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      for (const p of productosMostrados) {
+        if (marcado) next.add(p.id);
+        else next.delete(p.id);
+      }
+      return next;
+    });
+  }
+
+  function limpiarSeleccion() {
+    setSeleccion(new Set());
+    setTodoElFiltro(false);
+    setMasivoAviso(null);
+  }
+
+  /**
+   * Aplica el cambio a todo lo seleccionado de una sola llamada.
+   *
+   * Cuando es "todo el filtro" manda el filtro en vez de los ids: son miles de
+   * uuid que no tiene sentido pasear por la red, y el server los resuelve con
+   * los mismos filtros del listado.
+   */
+  async function aplicarMasivo(campo: "visible_web" | "destacado", valor: boolean) {
+    if (!hayAlgoSeleccionado || masivoGuardando) return;
+
+    const verbo =
+      campo === "visible_web"
+        ? valor
+          ? "publicar en la tienda"
+          : "sacar de la tienda"
+        : valor
+        ? "destacar"
+        : "sacar de destacados";
+    // El sitio es público: confirmar antes de mover cientos de productos ahí.
+    if (
+      cantidadAfectada > 1 &&
+      !window.confirm(
+        `Vas a ${verbo} ${cantidadAfectada.toLocaleString("es-PY")} productos. ¿Seguimos?`,
+      )
+    ) {
+      return;
+    }
+
+    setMasivoGuardando(true);
+    setMasivoAviso(null);
+    setTiendaError(null);
+    try {
+      const cuerpo: Record<string, unknown> = { [campo]: valor };
+      if (todoElFiltro) cuerpo.filtro = { q: search, categoria: categoriaId };
+      else cuerpo.ids = [...seleccion];
+
+      const r = await fetch("/api/productos/tienda-masivo", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        throw new Error((j as { error?: string })?.error ?? "No se pudo guardar.");
+      }
+
+      const { actualizados = 0, omitidos = 0 } = (j.data ?? {}) as {
+        actualizados?: number;
+        omitidos?: number;
+      };
+      setMasivoAviso(
+        omitidos > 0
+          ? `Listo: ${actualizados.toLocaleString("es-PY")} productos. Quedaron ${omitidos.toLocaleString("es-PY")} afuera` +
+            (campo === "visible_web" && valor
+              ? " porque son insumos y no se publican."
+              : " porque todavía no están en la tienda.")
+          : `Listo: ${actualizados.toLocaleString("es-PY")} productos.`,
+      );
+      limpiarSeleccion();
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setTiendaError(e instanceof Error ? e.message : "No se pudo actualizar la tienda.");
+    } finally {
+      setMasivoGuardando(false);
+    }
   }
 
   return (
@@ -425,11 +560,116 @@ export default function InventarioPage() {
           </div>
         )}
 
+        {masivoAviso && (
+          <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 sm:px-5">
+            {masivoAviso}
+          </div>
+        )}
+
+        {/*
+          Barra de acciones en masa. Aparece sola cuando hay algo tildado y se
+          queda pegada arriba al scrollear: con 137 páginas, la selección se
+          arma scrolleando y el botón tiene que seguir a mano.
+        */}
+        {isAdmin && hayAlgoSeleccionado && (
+          <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b-2 border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-4 py-3 backdrop-blur sm:px-5">
+            <span className="text-sm font-semibold text-[#3F8E91]">
+              {todoElFiltro
+                ? `Los ${total.toLocaleString("es-PY")} del filtro`
+                : `${seleccion.size.toLocaleString("es-PY")} seleccionado${seleccion.size === 1 ? "" : "s"}`}
+            </span>
+
+            {/* El salto de "esta página" a "todo el filtro": sin esto, publicar
+                una categoría de 948 serían 10 páginas de tildar. */}
+            {!todoElFiltro && paginaCompleta && total > productosMostrados.length && (
+              <button
+                type="button"
+                onClick={() => setTodoElFiltro(true)}
+                className="rounded-md px-2 py-1 text-xs font-semibold text-[#3F8E91] underline underline-offset-2 hover:bg-white/60"
+              >
+                Seleccionar los {total.toLocaleString("es-PY")} que coinciden
+              </button>
+            )}
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={masivoGuardando}
+                onClick={() => aplicarMasivo("visible_web", true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[#3F8E91] active:scale-95 disabled:opacity-50"
+              >
+                {masivoGuardando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Store className="h-3.5 w-3.5" />
+                )}
+                Publicar en la tienda
+              </button>
+              <button
+                type="button"
+                disabled={masivoGuardando}
+                onClick={() => aplicarMasivo("visible_web", false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800 active:scale-95 disabled:opacity-50"
+              >
+                <EyeOff className="h-3.5 w-3.5" />
+                Sacar de la tienda
+              </button>
+              <button
+                type="button"
+                disabled={masivoGuardando}
+                onClick={() => aplicarMasivo("destacado", true)}
+                title="Aparecen en «Elegidos de Total», en la portada. Solo cuenta para los que ya están publicados."
+                className="inline-flex items-center gap-1.5 rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800 active:scale-95 disabled:opacity-50"
+              >
+                <Star className="h-3.5 w-3.5" />
+                Destacar
+              </button>
+              <button
+                type="button"
+                disabled={masivoGuardando}
+                onClick={() => aplicarMasivo("destacado", false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800 active:scale-95 disabled:opacity-50"
+              >
+                <StarOff className="h-3.5 w-3.5" />
+                Quitar destacado
+              </button>
+              <button
+                type="button"
+                disabled={masivoGuardando}
+                onClick={limpiarSeleccion}
+                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/60 hover:text-slate-700 disabled:opacity-50"
+                aria-label="Limpiar selección"
+                title="Limpiar selección"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Tabla */}
         <EdgeScrollArea>
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
               <tr className="border-b-2 border-[#4FAEB2]/15 bg-[#4FAEB2]/5 text-[11px] font-bold uppercase tracking-wider text-[#3F8E91]">
+                {isAdmin && (
+                  <th className="w-10 pl-5 pr-1 py-3">
+                    <input
+                      type="checkbox"
+                      checked={paginaCompleta}
+                      ref={(el) => {
+                        // Medio tildado cuando la página está a medias: dice
+                        // "hay algo elegido acá" sin mentir que está todo.
+                        if (el) el.indeterminate = seleccionadosEnPagina > 0 && !paginaCompleta;
+                      }}
+                      onChange={(e) => alternarPagina(e.target.checked)}
+                      disabled={productosMostrados.length === 0}
+                      className="h-3.5 w-3.5 cursor-pointer accent-[#4FAEB2] disabled:opacity-40"
+                      aria-label="Seleccionar todos los de esta página"
+                      title="Seleccionar todos los de esta página"
+                    />
+                  </th>
+                )}
                 <th className="px-5 py-3">Producto</th>
                 <th className="hidden px-3 py-3 lg:table-cell">SKU</th>
                 <th className="hidden px-3 py-3 md:table-cell">Categoría</th>
@@ -445,14 +685,14 @@ export default function InventarioPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && productos.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-16 text-center">
+                  <td colSpan={isAdmin ? 11 : 10} className="px-5 py-16 text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
                     <p className="mt-2 text-xs text-slate-500">Cargando productos...</p>
                   </td>
                 </tr>
               ) : productosMostrados.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-16 text-center">
+                  <td colSpan={isAdmin ? 11 : 10} className="px-5 py-16 text-center">
                     <Package className="mx-auto h-8 w-8 text-slate-300" />
                     <p className="mt-3 text-sm font-medium text-slate-700">
                       No se encontraron productos
@@ -477,8 +717,21 @@ export default function InventarioPage() {
                     <Fragment key={`grp-${p.id}`}>
                     <tr
                       key={p.id}
-                      className="border-b border-slate-100 transition-colors hover:bg-[#4FAEB2]/5"
+                      className={`border-b border-slate-100 transition-colors hover:bg-[#4FAEB2]/5 ${
+                        seleccion.has(p.id) || todoElFiltro ? "bg-[#4FAEB2]/10" : ""
+                      }`}
                     >
+                      {isAdmin && (
+                        <td className="w-10 pl-5 pr-1 py-3.5">
+                          <input
+                            type="checkbox"
+                            checked={todoElFiltro || seleccion.has(p.id)}
+                            onChange={(e) => alternarFila(p.id, e.target.checked)}
+                            className="h-3.5 w-3.5 cursor-pointer accent-[#4FAEB2]"
+                            aria-label={`Seleccionar ${p.nombre}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <div className="min-w-0">
