@@ -40,11 +40,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Perfil no encontrado" }, { status: 403 });
     }
 
+    // Restablecer la clave de OTRO no se hereda del rol: va por la marca
+    // `puede_resetear_password`. Antes alcanzaba con ser admin/administrador, y
+    // eso incluía a las vendedoras: podían cambiarle la contraseña al
+    // administrador y dejarlo afuera del sistema.
+    //
+    // No se separó por el nombre del rol ('admin' vs 'administrador') porque en
+    // el resto del ERP son sinónimos: el día que alguien cree un usuario con
+    // rol 'admin' se llevaría la facultad sin que nadie lo decida.
     const rolEditor = (authR.catalogUsuario.rol ?? "").trim();
     const puede =
-      rolEditor === "super_admin" || ["admin", "administrador"].includes(rolEditor);
+      rolEditor === "super_admin" ||
+      (authR.catalogUsuario as { puede_resetear_password?: boolean }).puede_resetear_password === true;
     if (!puede) {
-      return NextResponse.json({ error: "Sin permiso para restablecer contraseñas" }, { status: 403 });
+      return NextResponse.json(
+        { error: "No tenés permiso para cambiar contraseñas de otros usuarios. Pedíselo al administrador." },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

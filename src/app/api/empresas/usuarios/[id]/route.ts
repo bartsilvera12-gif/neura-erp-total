@@ -161,6 +161,8 @@ export async function GET(
     const currentUser = {
       empresa_id: authR.catalogUsuario.empresa_id ?? undefined,
       rol: authR.catalogUsuario.rol ?? undefined,
+      puede_resetear_password:
+        (authR.catalogUsuario as { puede_resetear_password?: boolean }).puede_resetear_password === true,
     };
 
     const { data: usuario, error } = await supabase
@@ -263,6 +265,12 @@ export async function GET(
       (currentUser?.rol ?? "").trim() === "super_admin" ||
       ["admin", "administrador"].includes((currentUser?.rol ?? "").trim());
 
+    // Cambiar la clave de otro va por marca propia, no por rol: el endpoint de
+    // password valida lo mismo. Acá solo decide si la sección se muestra.
+    const puede_resetear_password =
+      (currentUser?.rol ?? "").trim() === "super_admin" ||
+      (currentUser as { puede_resetear_password?: boolean } | null)?.puede_resetear_password === true;
+
     let omnicanal: OmnicanalPack | null = null;
     if (usuario.empresa_id) {
       omnicanal = await loadOmnicanalPackForUsuarioDetail(usuario.empresa_id as string, id);
@@ -278,6 +286,7 @@ export async function GET(
       default_dashboard_view_id,
       puede_editar_modulos,
       puede_editar_rol,
+      puede_resetear_password,
       es_admin_empresa,
       omnicanal,
     });

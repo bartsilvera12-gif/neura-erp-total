@@ -6,6 +6,8 @@ export type UsuarioErpBasico = {
   id: string;
   empresa_id: string | null;
   rol: string | null;
+  /** Restablecer la clave de OTROS. No se hereda del rol: es una marca propia. */
+  puede_resetear_password?: boolean | null;
 };
 
 /**
@@ -20,7 +22,7 @@ export async function resolveUsuarioErpFromAuthUser(
 
   const { data: byAuth, error: errAuth } = await supabase
     .from("usuarios")
-    .select("id, empresa_id, rol")
+    .select("id, empresa_id, rol, puede_resetear_password")
     .eq("auth_user_id", user.id)
     .limit(1);
   if (errAuth) {
@@ -48,7 +50,7 @@ export async function resolveUsuarioErpFromAuthUser(
   for (const em of emailsToTry) {
     const { data: rows, error } = await supabase
       .from("usuarios")
-      .select("id, empresa_id, rol")
+      .select("id, empresa_id, rol, puede_resetear_password")
       .ilike("email", em)
       .limit(1);
     if (error) {

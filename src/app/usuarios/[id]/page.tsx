@@ -41,6 +41,8 @@ type Usuario = {
   default_dashboard_view_id?: string | null;
   puede_editar_modulos?: boolean;
   puede_editar_rol?: boolean;
+  /** Restablecer la clave de OTROS. Marca propia del usuario, no del rol. */
+  puede_resetear_password?: boolean;
   es_admin_empresa?: boolean;
   omnicanal?: {
     agent_enabled: boolean;
@@ -421,8 +423,11 @@ function UsuarioDetailContent() {
     return `${d}/${m}/${y}`;
   }
 
-  /** API de password exige admin/super_admin — alineado con puede_editar_rol. */
-  const showResetPwd = usuario.puede_editar_rol === true;
+
+  // La sección se muestra solo a quien realmente puede usarla. Antes alcanzaba
+  // con poder editar el rol, y eso incluía a cualquier administrador: una
+  // vendedora podía cambiarle la clave al administrador y dejarlo afuera.
+  const showResetPwd = usuario.puede_resetear_password === true;
 
   return (
     <div className="space-y-8 max-w-2xl">
