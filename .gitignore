@@ -48,3 +48,9 @@ e2e-super-admin*.png
 
 # Scripts sueltos de diagnóstico contra la base (no van al repo)
 .tmp-*.ts
+
+# Catalogo de productos del cliente: trae la columna COSTO y el repo es
+# publico. Los .xlsx de scripts/ se quedan en la maquina, no se suben.
+scripts/**/*.xlsx
+scripts/**/*.xls
+scripts/**/*.csv
