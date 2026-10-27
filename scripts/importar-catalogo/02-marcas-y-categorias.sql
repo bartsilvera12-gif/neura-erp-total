@@ -393,10 +393,3 @@ BEGIN
 END $$;
 
 NOTIFY pgrst, 'reload schema';
-
--- ── Verificacion: correr esto despues y mirar que los numeros cierren ──────
-SELECT 'productos de la lista'      AS chequeo, count(*)::text AS valor FROM total.productos WHERE sku ~ '^[0-9]+$'
-UNION ALL SELECT 'sin categoria (debe ser 0)', count(*)::text FROM total.productos WHERE sku ~ '^[0-9]+$' AND categoria_principal_id IS NULL
-UNION ALL SELECT 'con marca',                  count(*)::text FROM total.productos WHERE sku ~ '^[0-9]+$' AND marca_id IS NOT NULL
-UNION ALL SELECT 'sin marca (queda a mano)',   count(*)::text FROM total.productos WHERE sku ~ '^[0-9]+$' AND marca_id IS NULL
-UNION ALL SELECT 'marcas duplicadas (debe 0)', count(*)::text FROM (SELECT upper(nombre) FROM total.marcas GROUP BY 1 HAVING count(*)>1) d;

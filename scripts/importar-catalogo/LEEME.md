@@ -74,6 +74,18 @@ Los 3 de prueba (`PRODUCTO PRUEBA`, `PRODUCTO PRUEBA 2`, `PRUEBA 3`) **no** se
 tocan: tienen 16 renglones de venta de los videos. Para borrarlos hay que
 anular esas ventas primero.
 
+## Nombres con el encoding roto
+
+El export del sistema viejo trae **10 nombres con el UTF-8 roto**: venían
+`BALANZA DIGITAL P/ BAÃ`O`, `ASPIRADORA SPEED PORTÃ¡TIL`,
+`VITROCERÃ¡MICA`, `DISEÃ±O TORTUGA`, `TENSIOMETRO DE MUÃ`ECA`.
+
+Son bytes UTF-8 que el sistema viejo leyó como Latin-1. El SQL los carga ya
+reparados (`BAÑO`, `PORTÁTIL`, `VITROCERÁMICA`, `DISEÑO`, `MUÑECA`).
+
+En cuatro de ellos el segundo byte de la Ñ salió como un backtick ASCII, así
+que el round-trip no alcanzaba y van con un reemplazo explícito.
+
 ## Reparto por categoría
 
 | Categoría | Productos | |
