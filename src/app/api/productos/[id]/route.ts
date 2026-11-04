@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
+import { guardarCaracteristicas, leerCaracteristicas } from "@/lib/inventario/server/caracteristicas-web";
 
 const PRODUCTO_COLS =
   "id, empresa_id, nombre, sku, costo_promedio, precio_venta, stock_actual, stock_minimo, " +
@@ -69,7 +70,10 @@ export async function GET(
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
-    return NextResponse.json(successResponse({ producto: rowToApi(data as unknown as Record<string, unknown>) }));
+    const caracteristicas = await leerCaracteristicas(ctx.supabase, ctx.auth.empresa_id, id);
+    return NextResponse.json(
+      successResponse({ producto: { ...rowToApi(data as unknown as Record<string, unknown>), caracteristicas } })
+    );
   } catch (err) {
     console.error("[/api/productos/[id] GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo cargar el producto."), { status: 500 });
@@ -212,6 +216,23 @@ export async function PATCH(
     if (body.modo_receta !== undefined) {
       const mr = body.modo_receta;
       patch.modo_receta = mr === "produccion_previa" ? "produccion_previa" : "preparado_al_vender";
+    }
+
+    // Características de la tienda: van a `web_producto.ficha`, no a `productos`.
+    // Si fallan se corta acá con el aviso, antes de tocar el resto: así el
+    // formulario queda abierto y se puede volver a guardar.
+    if (typeof body.caracteristicas === "string") {
+      const existe = await sb
+        .from("productos").select("id").eq("empresa_id", empresaId).eq("id", id).maybeSingle();
+      if (existe.error) throw new Error(existe.error.message);
+      if (!existe.data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+      const aviso = await guardarCaracteristicas(sb, empresaId, id, body.caracteristicas);
+      if (aviso) {
+        return NextResponse.json(
+          errorResponse("No se pudieron guardar las características. No se guardó ningún cambio; intentá de nuevo."),
+          { status: 500 }
+        );
+      }
     }
 
     if (Object.keys(patch).length === 0) {

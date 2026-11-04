@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import SelectFromList from "@/components/inventario/SelectFromList";
+import { CaracteristicasTiendaField } from "@/components/inventario/CaracteristicasTiendaField";
 import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import { cargarSeries } from "@/lib/inventario/series";
 import type { MetodoValuacion } from "@/lib/inventario/types";
@@ -21,6 +22,7 @@ export default function NuevoProductoPage() {
   const [form, setForm] = useState({
     nombre: "",
     descripcion: "",
+    caracteristicas: "",
     sku: "",
     codigo_barras: "",
     costo_promedio: "",
@@ -306,6 +308,7 @@ export default function NuevoProductoPage() {
         guardado = await saveProducto({
           nombre: form.nombre.trim().toUpperCase(),
           descripcion: form.descripcion.trim() || null,
+          caracteristicas: form.caracteristicas,
           sku: form.sku.trim().toUpperCase(),
           costo_promedio: parseFloat(form.costo_promedio) || 0,
           precio_venta: parseFloat(form.precio_venta) || 0,
@@ -366,6 +369,12 @@ export default function NuevoProductoPage() {
             );
           }
         }
+      }
+
+      // Características: el producto ya se creó. Si no se guardaron, avisar y
+      // seguir; se pueden cargar desde Editar.
+      if (guardado.caracteristicas_aviso) {
+        alert(`${guardado.caracteristicas_aviso}\n\nPodés cargarlas desde la edición del producto.`);
       }
 
       // Subir imagen (post-creacion, con producto_id real)
@@ -490,6 +499,15 @@ export default function NuevoProductoPage() {
               className={inputClass}
             />
           </div>
+
+          {tipoGastro !== "materia" && (
+            <CaracteristicasTiendaField
+              value={form.caracteristicas}
+              onChange={(v) => setForm((f) => ({ ...f, caracteristicas: v }))}
+              labelClass={labelClass}
+              inputClass={inputClass}
+            />
+          )}
 
           {/* SKU + Unidad de medida */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

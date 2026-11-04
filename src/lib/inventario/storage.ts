@@ -57,6 +57,8 @@ interface ProductoRow {
   tiempo_prep_minutos?: number | null;
   descripcion?: string | null;
   modo_receta?: string | null;
+  caracteristicas?: string;
+  caracteristicas_aviso?: string | null;
 }
 
 interface MovimientoRow {
@@ -130,6 +132,8 @@ function rowToProducto(row: ProductoRow): Producto {
     tiempo_prep_minutos: row.tiempo_prep_minutos != null ? Number(row.tiempo_prep_minutos) : 0,
     descripcion: row.descripcion ?? null,
     modo_receta: row.modo_receta ?? "preparado_al_vender",
+    caracteristicas: row.caracteristicas,
+    caracteristicas_aviso: row.caracteristicas_aviso ?? null,
   };
 }
 
@@ -317,6 +321,7 @@ export async function saveProducto(
         ? datos.tiempo_prep_minutos
         : 0,
     descripcion: datos.descripcion ?? null,
+    caracteristicas: datos.caracteristicas,
   };
 
   const res = await fetch("/api/productos", {
@@ -397,6 +402,7 @@ export async function updateProducto(
     body.tiempo_prep_minutos = datos.tiempo_prep_minutos;
   if (datos.descripcion !== undefined) body.descripcion = datos.descripcion;
   if (datos.modo_receta !== undefined) body.modo_receta = datos.modo_receta;
+  if (datos.caracteristicas !== undefined) body.caracteristicas = datos.caracteristicas;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
     method: "PATCH",

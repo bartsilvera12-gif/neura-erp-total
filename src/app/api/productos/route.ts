@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
 import { applyTokenSearch } from "@/lib/productos/token-search";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
+import { guardarCaracteristicas } from "@/lib/inventario/server/caracteristicas-web";
 
 /**
  * GET/POST de productos via PostgREST (sin pool PG directo) — compatible Hostinger.
@@ -386,7 +387,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(successResponse({ producto: rowToApi(row), warning: movWarning }));
+    // Características de la tienda (web_producto.ficha). El producto ya existe:
+    // si fallan no se corta, se avisa y se pueden cargar desde Editar.
+    let caracteristicasAviso: string | null = null;
+    if (typeof body.caracteristicas === "string" && body.caracteristicas.trim()) {
+      caracteristicasAviso = await guardarCaracteristicas(sb, empresaId, productoId, body.caracteristicas);
+    }
+
+    return NextResponse.json(
+      successResponse({
+        producto: { ...rowToApi(row), caracteristicas_aviso: caracteristicasAviso },
+        warning: movWarning,
+      })
+    );
   } catch (err) {
     console.error("[/api/productos POST] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(

@@ -85,6 +85,13 @@ export interface Producto {
   tiempo_prep_minutos?: number;
   /** Descripción detallada (visible en Menú y edición). */
   descripcion?: string | null;
+  /**
+   * Características para la tienda web, una por renglón. Viven en
+   * `web_producto.ficha`, no en `productos` (ver lib/inventario/caracteristicas).
+   */
+  caracteristicas?: string;
+  /** Aviso del servidor si el producto se guardó pero las características no. */
+  caracteristicas_aviso?: string | null;
   /** Modo de receta (productos de Menú): 'preparado_al_vender' | 'produccion_previa'. */
   modo_receta?: string;
 }

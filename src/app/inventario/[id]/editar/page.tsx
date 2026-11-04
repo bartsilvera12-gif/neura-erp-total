@@ -11,6 +11,7 @@ import ProyeccionProductoCard from "@/components/inventario/ProyeccionProductoCa
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import ProductImageUploader from "@/components/inventario/ProductImageUploader";
 import SelectFromList from "@/components/inventario/SelectFromList";
+import { CaracteristicasTiendaField } from "@/components/inventario/CaracteristicasTiendaField";
 import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
 
@@ -35,6 +36,7 @@ export default function EditarProductoPage() {
 
   // descripcion live separately because form se inicializa al cargar
   const [descripcion, setDescripcion] = useState("");
+  const [caracteristicas, setCaracteristicas] = useState("");
   /** Unidades a sumar o restar con los botones. No es el stock: es el delta. */
   const [ajusteCantidad, setAjusteCantidad] = useState(1);
   /** Stock con el que se abrió la pantalla, para mostrar "28 → 33 (+5)". */
@@ -262,6 +264,7 @@ export default function EditarProductoPage() {
       setDiscountEndsAt(toLocalInput(p.discount_ends_at));
       setModoReceta(p.modo_receta === "produccion_previa" ? "produccion_previa" : "preparado_al_vender");
       setDescripcion(p.descripcion ?? "");
+      setCaracteristicas(p.caracteristicas ?? "");
       setValorizado(p.valorizado ?? true);
       setUnidadCompra(p.unidad_compra ?? "");
       setUnidadReceta(p.unidad_receta ?? "");
@@ -404,6 +407,7 @@ export default function EditarProductoPage() {
         factor_compra_receta: Math.max(parseFloat(factorCompraReceta) || 1, 0.0001),
         tiempo_prep_minutos: Math.max(parseInt(tiempoPrepMinutos) || 0, 0),
         descripcion: descripcion.trim() || null,
+        caracteristicas,
         // Modo de receta solo aplica a Menú con receta; en otros tipos se mantiene el default.
         modo_receta: tipoGastro === "menu" && tieneReceta ? modoReceta : "preparado_al_vender",
       };
@@ -561,6 +565,15 @@ export default function EditarProductoPage() {
               className={inputClass}
             />
           </div>
+
+          {tipoGastro !== "materia" && (
+            <CaracteristicasTiendaField
+              value={caracteristicas}
+              onChange={setCaracteristicas}
+              labelClass={labelClass}
+              inputClass={inputClass}
+            />
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
