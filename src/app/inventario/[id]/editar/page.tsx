@@ -10,6 +10,7 @@ import { getProducto, productoExiste, updateProducto } from "@/lib/inventario/st
 import ProyeccionProductoCard from "@/components/inventario/ProyeccionProductoCard";
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import ProductImageUploader from "@/components/inventario/ProductImageUploader";
+import { FotosAdicionales } from "@/components/inventario/FotosAdicionales";
 import SelectFromList from "@/components/inventario/SelectFromList";
 import { CaracteristicasTiendaField } from "@/components/inventario/CaracteristicasTiendaField";
 import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
@@ -664,6 +665,13 @@ export default function EditarProductoPage() {
               }}
             />
           </div>
+
+          {tipoGastro !== "materia" && (
+            <div>
+              <label className={labelClass}>Fotos adicionales para la tienda</label>
+              <FotosAdicionales productoId={id} />
+            </div>
+          )}
 
           {/* Clasificación y proveedor */}
           <div className="border-t border-slate-100 pt-6">

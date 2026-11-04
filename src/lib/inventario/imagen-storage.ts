@@ -56,6 +56,19 @@ export function buildProductoImagenPath(empresaId: string, productoId: string, m
 }
 
 /**
+ * Fotos adicionales para la tienda web (además de la principal): hasta 2, o sea
+ * 3 en total por producto. Se guardan en el mismo bucket con nombre único, así
+ * cambiar una no pisa a otra ni deja la vieja en el caché del navegador.
+ */
+export const MAX_FOTOS_ADICIONALES = 2;
+
+export function buildProductoImagenExtraPath(empresaId: string, productoId: string, mime: string): string {
+  const ext = ALLOWED_IMAGE_EXT[mime] ?? "bin";
+  const unico = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `${empresaId}/${productoId}/extra-${unico}.${ext}`;
+}
+
+/**
  * Genera URL firmada para visualizar la imagen. TTL por defecto 1h.
  * Devuelve null si el path es inválido o si falla.
  */

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import SelectFromList from "@/components/inventario/SelectFromList";
 import { CaracteristicasTiendaField } from "@/components/inventario/CaracteristicasTiendaField";
+import { FotosAdicionalesPendientes, subirFotosAdicionales, type FotoPendiente } from "@/components/inventario/FotosAdicionales";
 import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import { cargarSeries } from "@/lib/inventario/series";
 import type { MetodoValuacion } from "@/lib/inventario/types";
@@ -110,6 +111,8 @@ export default function NuevoProductoPage() {
   const [imagenFile, setImagenFile] = useState<File | null>(null);
   const [imagenPreview, setImagenPreview] = useState<string | null>(null);
   const [imagenError, setImagenError] = useState<string | null>(null);
+  // Fotos adicionales para la tienda: también se suben después de crear.
+  const [fotosAdicionales, setFotosAdicionales] = useState<FotoPendiente[]>([]);
 
   const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp"];
   const MAX_IMG_BYTES = 5 * 1024 * 1024;
@@ -377,6 +380,18 @@ export default function NuevoProductoPage() {
         alert(`${guardado.caracteristicas_aviso}\n\nPodés cargarlas desde la edición del producto.`);
       }
 
+      // Fotos adicionales (post-creacion). Si alguna falla, el producto ya está
+      // creado: se avisa y se cargan desde Editar.
+      if (fotosAdicionales.length > 0) {
+        const errores = await subirFotosAdicionales(guardado.id, fotosAdicionales);
+        if (errores.length > 0) {
+          alert(
+            `Producto creado, pero algunas fotos adicionales no se pudieron subir:\n${errores.join("\n")}\n\n` +
+            "Podés cargarlas desde la edición del producto."
+          );
+        }
+      }
+
       // Subir imagen (post-creacion, con producto_id real)
       if (imagenFile) {
         try {
@@ -628,6 +643,13 @@ export default function NuevoProductoPage() {
               </div>
             </div>
           </div>
+
+          {tipoGastro !== "materia" && (
+            <div>
+              <label className={labelClass}>Fotos adicionales para la tienda</label>
+              <FotosAdicionalesPendientes archivos={fotosAdicionales} onChange={setFotosAdicionales} />
+            </div>
+          )}
 
           {/* Costo (+ Markup + Precio en productos comerciales) — bloque reactivo */}
           <div>
