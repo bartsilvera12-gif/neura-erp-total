@@ -78,3 +78,37 @@ export function applyTokenSearch<Q extends { or: (f: string) => Q }>(
   }
   return out;
 }
+
+/** Columna generada (lower + sin acentos de nombre+sku+codigo_barras) sobre la
+ *  que busca el catalogo de productos. La crea la migracion
+ *  20261104120000_productos_busqueda_normalizada_unaccent. */
+export const PRODUCTO_BUSQUEDA_COL = "busqueda_normalizada";
+
+/**
+ * Server-side (PostgREST) para el catalogo de PRODUCTOS: matching por tokens
+ * INSENSIBLE A ACENTOS Y MAYUSCULAS.
+ *
+ * A diferencia de applyTokenSearch (ILIKE crudo sobre varias columnas, sensible
+ * a acentos), normaliza la consulta igual que la columna generada del producto
+ * (NFD + sin diacriticos + minusculas) y busca sobre esa unica columna. Asi
+ * "television" encuentra "Televisión" y viceversa. Cada token se exige por
+ * separado (AND entre `.or()` de nivel superior) → orden-independiente y por
+ * palabra parcial. Consulta vacia → no agrega filtro.
+ *
+ * Debe usarse en TODAS las pantallas que listan/cuentan productos (listado,
+ * seleccion masiva, picker) para que "lo que se ve" y "todos los que coinciden"
+ * sean exactamente el mismo conjunto.
+ */
+export function applyProductoTokenSearch<Q extends { or: (f: string) => Q }>(
+  query: Q,
+  q: string
+): Q {
+  const tokens = splitTokens(normalizeText(q));
+  let out = query;
+  for (const tokRaw of tokens) {
+    const tok = escapeIlikeToken(tokRaw);
+    if (!tok) continue;
+    out = out.or(`${PRODUCTO_BUSQUEDA_COL}.ilike.%${tok}%`);
+  }
+  return out;
+}

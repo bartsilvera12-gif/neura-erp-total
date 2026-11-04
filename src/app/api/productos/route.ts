@@ -3,7 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
-import { applyTokenSearch } from "@/lib/productos/token-search";
+import { applyProductoTokenSearch } from "@/lib/productos/token-search";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 import { guardarCaracteristicas } from "@/lib/inventario/server/caracteristicas-web";
 
@@ -65,7 +65,7 @@ async function existsId(
  * GET /api/productos
  *
  * Devuelve productos del tenant. Soporta paginacion + filtros server-side:
- *  - q=<text>          Busqueda case-insensitive sobre nombre o sku
+ *  - q=<text>          Busqueda por tokens sin acentos ni mayusculas sobre nombre, sku y codigo_barras
  *  - categoria=<uuid>  Filtra por categoria_principal_id.
  *                      Valor especial "__sin__" -> productos sin categoria.
  *  - limit=<n>         Tamano de pagina (default 25, max 500). 0 = sin limite.
@@ -97,12 +97,21 @@ export async function GET(request: NextRequest) {
       let base = ctx.supabase
         .from("productos")
         .select(PRODUCTO_COLS, {
-          // count: "planned" usa pg_stats en vez de COUNT(*) exacto.
-          count: "planned",
+          // count: "exact" => COUNT(*) real del conjunto filtrado. "planned"
+          // (estimacion via pg_stats) daba totales erroneos cuando hay filtro
+          // de busqueda ILIKE: subestimaba las coincidencias, capaba la
+          // cantidad de paginas y dejaba productos inalcanzables (p.ej. buscar
+          // "Midas" o "TV LED" no mostraba todos los resultados). El costo del
+          // COUNT exacto sobre el set ya filtrado es aceptable para el catalogo.
+          count: "exact",
         })
         .eq("empresa_id", ctx.auth.empresa_id)
         .eq("activo", true);
-      if (q) base = applyTokenSearch(base, q, ["nombre", "sku"]);
+      // Busqueda por tokens (palabras en cualquier orden) INSENSIBLE a acentos
+      // y mayusculas sobre la columna normalizada (nombre+sku+codigo_barras).
+      // Indexada con GIN trigram, asi que el %tok% es rapido, y encuentra un
+      // producto tipeando/escaneando su codigo o con/sin tildes.
+      if (q) base = applyProductoTokenSearch(base, q);
       if (categoria === "__sin__") base = base.is("categoria_principal_id", null);
       else if (categoria) base = base.eq("categoria_principal_id", categoria);
       return base.order("nombre");

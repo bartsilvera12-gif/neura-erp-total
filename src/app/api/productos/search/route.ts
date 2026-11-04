@@ -3,7 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { signProductoImagen } from "@/lib/inventario/imagen-storage";
-import { applyTokenSearch } from "@/lib/productos/token-search";
+import { applyProductoTokenSearch } from "@/lib/productos/token-search";
 
 interface ProductoSearchHit {
   id: string;
@@ -87,9 +87,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (q.length > 0) {
-      // Cada palabra debe aparecer en nombre/sku/codigo_barras (AND entre
-      // tokens, OR entre columnas) → matching orden-independiente.
-      query = applyTokenSearch(query, q, ["nombre", "sku", "codigo_barras"]);
+      // Cada palabra debe aparecer en la columna normalizada
+      // (nombre+sku+codigo_barras, sin acentos ni mayusculas) → matching
+      // orden-independiente, por palabra parcial e insensible a tildes.
+      query = applyProductoTokenSearch(query, q);
     }
 
     if (categoriaId) {

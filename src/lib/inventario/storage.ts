@@ -457,9 +457,10 @@ export interface MovimientosPaginadosResult {
 }
 
 /**
- * Lista movimientos paginados con filtros server-side. Mismo modelo que
- * getProductosPaginated. El total viene de count: "planned" (estimacion
- * rapida via pg_stats).
+ * Lista movimientos paginados con filtros server-side. El total viene de
+ * count: "planned" (estimacion rapida via pg_stats). Nota: el listado de
+ * productos (getProductosPaginated) usa count: "exact" porque ahi la
+ * estimacion rompia la cantidad de paginas al filtrar por busqueda.
  */
 export async function getMovimientosPaginated(
   opts: MovimientosPaginadosOpts = {}

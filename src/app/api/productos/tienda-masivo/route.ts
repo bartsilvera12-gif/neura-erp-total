@@ -3,7 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import { applyTokenSearch } from "@/lib/productos/token-search";
+import { applyProductoTokenSearch } from "@/lib/productos/token-search";
 
 /**
  * POST /api/productos/tienda-masivo
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
           .select("id")
           .eq("empresa_id", empresaId)
           .eq("activo", true);
-        if (q) base = applyTokenSearch(base, q, ["nombre", "sku"]);
+        if (q) base = applyProductoTokenSearch(base, q);
         if (categoria === "__sin__") base = base.is("categoria_principal_id", null);
         else if (categoria) base = base.eq("categoria_principal_id", categoria);
         return base.order("nombre");
