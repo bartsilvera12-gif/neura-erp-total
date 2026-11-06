@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import {
   ALLOWED_IMAGE_MIME,
+  IMAGE_CACHE_CONTROL,
   MAX_IMAGE_BYTES,
   PRODUCTOS_IMAGENES_BUCKET,
   buildProductoImagenPath,
@@ -113,7 +114,7 @@ export async function POST(
     const buf = Buffer.from(await file.arrayBuffer());
     const up = await supabase.storage
       .from(PRODUCTOS_IMAGENES_BUCKET)
-      .upload(path, buf, { contentType: file.type, upsert: true });
+      .upload(path, buf, { contentType: file.type, upsert: true, cacheControl: IMAGE_CACHE_CONTROL });
     if (up.error) {
       console.error("[/api/productos/[id]/imagen POST] upload", { empresaId, productoId, message: up.error.message });
       return NextResponse.json(

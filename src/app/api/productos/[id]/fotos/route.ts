@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import {
   ALLOWED_IMAGE_MIME,
+  IMAGE_CACHE_CONTROL,
   MAX_FOTOS_ADICIONALES,
   MAX_IMAGE_BYTES,
   PRODUCTOS_IMAGENES_BUCKET,
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest, ctxParams: { params: Promise<{ 
     const path = buildProductoImagenExtraPath(empresaId, productoId, file.type);
     const up = await supabase.storage
       .from(PRODUCTOS_IMAGENES_BUCKET)
-      .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false });
+      .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false, cacheControl: IMAGE_CACHE_CONTROL });
     if (up.error) {
       console.error("[/api/productos/[id]/fotos POST] upload", up.error.message);
       return NextResponse.json(errorResponse(`No se pudo subir la imagen: ${up.error.message}`), { status: 500 });

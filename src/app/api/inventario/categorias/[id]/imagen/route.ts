@@ -5,6 +5,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import {
   ALLOWED_CATEGORIA_IMAGE_MIME,
   CATEGORIAS_IMAGENES_BUCKET,
+  CATEGORIA_IMAGE_CACHE_CONTROL,
   MAX_CATEGORIA_IMAGE_BYTES,
   buildCategoriaImagenPath,
   ensureCategoriasImagenesBucket,
@@ -84,7 +85,7 @@ export async function POST(
     const buf = Buffer.from(await file.arrayBuffer());
     const up = await supabase.storage
       .from(CATEGORIAS_IMAGENES_BUCKET)
-      .upload(path, buf, { contentType: file.type, upsert: true });
+      .upload(path, buf, { contentType: file.type, upsert: true, cacheControl: CATEGORIA_IMAGE_CACHE_CONTROL });
     if (up.error) {
       console.error("[categorias/imagen] upload", up.error.message);
       return NextResponse.json(

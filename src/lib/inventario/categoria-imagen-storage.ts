@@ -21,6 +21,13 @@ export const ALLOWED_CATEGORIA_IMAGE_EXT: Record<string, string> = {
 };
 export const MAX_CATEGORIA_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+/**
+ * Cache-Control (segundos) al subir. Las categorias ya rompen el cache con un
+ * `?t=<timestamp>` en imagen_url, pero un max-age corto es defensa extra por si
+ * el buster se pierde en el camino. Ver IMAGE_CACHE_CONTROL de productos.
+ */
+export const CATEGORIA_IMAGE_CACHE_CONTROL = "60";
+
 let bucketEnsured = false;
 
 export async function ensureCategoriasImagenesBucket(

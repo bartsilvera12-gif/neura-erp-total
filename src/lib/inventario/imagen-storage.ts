@@ -2,7 +2,7 @@
  * Storage helpers para imagenes de producto.
  *
  * Bucket: `productos-imagenes` (privado).
- * Path:   `{empresa_id}/{producto_id}/principal.{ext}`
+ * Path:   `{empresa_id}/{producto_id}/principal-{unico}.{ext}`
  *
  * Aislamiento por tenant: el primer segmento del path es `empresa_id` y los
  * endpoints siempre validan el `empresa_id` del usuario antes de leer/escribir.
@@ -18,6 +18,16 @@ export const ALLOWED_IMAGE_EXT: Record<string, string> = {
   "image/webp": "webp",
 };
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Cache-Control (en segundos) que se le pide a Storage al subir una imagen.
+ *
+ * Supabase sirve las imagenes detras de Cloudflare, que respeta este max-age.
+ * Con el default (3600-14400s) una imagen reemplazada seguia sirviendose vieja
+ * desde el CDN y el navegador por horas. 60s mantiene el beneficio de cache
+ * para el trafico normal pero deja que un cambio se vea casi al instante.
+ */
+export const IMAGE_CACHE_CONTROL = "60";
 
 let bucketEnsured = false;
 
@@ -52,7 +62,12 @@ export async function ensureProductosImagenesBucket(supabase: AppSupabaseClient)
 
 export function buildProductoImagenPath(empresaId: string, productoId: string, mime: string): string {
   const ext = ALLOWED_IMAGE_EXT[mime] ?? "bin";
-  return `${empresaId}/${productoId}/principal.${ext}`;
+  // Nombre unico (como las fotos adicionales): al reemplazar la imagen principal
+  // el path cambia, asi la URL firmada tambien cambia y ni el navegador ni el CDN
+  // (Cloudflare) sirven la imagen vieja. El endpoint borra el archivo anterior
+  // (prod.imagen_path) antes de subir el nuevo, por lo que no quedan huerfanos.
+  const unico = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `${empresaId}/${productoId}/principal-${unico}.${ext}`;
 }
 
 /**
