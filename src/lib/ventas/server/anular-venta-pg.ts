@@ -231,8 +231,8 @@ export async function anularVentaPg(
     // la SET; los ya aprobados/enviados fueron bloqueados en el paso 2c).
     if (venta.factura_id) {
       await client.query(
-        `UPDATE ${tFac} SET estado = 'Anulada', saldo = 0
-          WHERE id = $1::uuid AND empresa_id = $2::uuid AND estado <> 'Anulada'`,
+        `UPDATE ${tFac} SET estado = 'Anulado', saldo = 0
+          WHERE id = $1::uuid AND empresa_id = $2::uuid AND estado <> 'Anulado'`,
         [venta.factura_id, empresaId]
       );
       await client.query(
