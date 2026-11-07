@@ -61,6 +61,7 @@ export async function POST(
       const status =
         err.code === "venta_no_encontrada" ? 404 :
         err.code === "venta_ya_anulada" ? 409 :
+        err.code === "factura_aprobada_sifen" ? 409 :
         400; // sin_caja | caja_cerrada
       return NextResponse.json(errorResponse(err.message), { status });
     }

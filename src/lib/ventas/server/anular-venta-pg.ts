@@ -24,7 +24,8 @@ export type AnularVentaCode =
   | "venta_ya_anulada"
   | "venta_de_guarda"
   | "sin_caja"
-  | "caja_cerrada";
+  | "caja_cerrada"
+  | "factura_aprobada_sifen";
 
 /** Error tipado para mapear a HTTP en la ruta (404/409/400). */
 export class AnularVentaError extends Error {
@@ -66,6 +67,8 @@ export async function anularVentaPg(
   const tSeries = quoteSchemaTable(schema, "producto_series");
   const tD = quoteSchemaTable(schema, "devoluciones_venta");
   const tRes = quoteSchemaTable(schema, "reservas");
+  const tFac = quoteSchemaTable(schema, "facturas");
+  const tFE = quoteSchemaTable(schema, "factura_electronica");
 
   const client = await pool().connect();
   try {
@@ -76,8 +79,9 @@ export async function anularVentaPg(
       numero_control: string | null;
       estado: string;
       caja_id: string | null;
+      factura_id: string | null;
     }>(
-      `SELECT numero_control, estado, caja_id::text AS caja_id
+      `SELECT numero_control, estado, caja_id::text AS caja_id, factura_id::text AS factura_id
          FROM ${tV} WHERE id = $1::uuid AND empresa_id = $2::uuid FOR UPDATE`,
       [ventaId, empresaId]
     );
@@ -118,6 +122,27 @@ export async function anularVentaPg(
     if (!cQ.rows[0] || String(cQ.rows[0].estado) !== "abierta") {
       await client.query("ROLLBACK");
       throw new AnularVentaError("caja_cerrada", "No se puede anular: la caja de esta venta ya está cerrada.");
+    }
+
+    // ── 2c) Factura electrónica: si el DE ya fue aprobado/enviado a la SET, NO se
+    // puede cancelar localmente; la corrección fiscal se hace con Nota de Crédito.
+    // Si nunca llegó a la SET (borrador/generado/firmado/error_envio/rechazado),
+    // se marca 'cancelado' más abajo junto con la factura.
+    if (venta.factura_id) {
+      const feQ = await client.query<{ estado_sifen: string }>(
+        `SELECT estado_sifen FROM ${tFE}
+          WHERE factura_id = $1::uuid AND empresa_id = $2::uuid
+          LIMIT 1 FOR UPDATE`,
+        [venta.factura_id, empresaId]
+      );
+      const estSifen = feQ.rows[0] ? String(feQ.rows[0].estado_sifen) : null;
+      if (estSifen === "aprobado" || estSifen === "enviado") {
+        await client.query("ROLLBACK");
+        throw new AnularVentaError(
+          "factura_aprobada_sifen",
+          "No se puede anular: la factura electrónica ya fue enviada/aprobada por la SET. Emití una Nota de Crédito para revertirla."
+        );
+      }
     }
 
     // ── 2b) Anular las devoluciones confirmadas de esta venta DENTRO de la MISMA
@@ -201,6 +226,22 @@ export async function anularVentaPg(
         WHERE empresa_id = $1::uuid AND venta_id = $2::uuid AND estado <> 'anulado'`,
       [empresaId, ventaId]
     );
+
+    // ── 6b) Anular la factura ERP y cancelar el DE local (si existe y no llegó a
+    // la SET; los ya aprobados/enviados fueron bloqueados en el paso 2c).
+    if (venta.factura_id) {
+      await client.query(
+        `UPDATE ${tFac} SET estado = 'Anulada', saldo = 0
+          WHERE id = $1::uuid AND empresa_id = $2::uuid AND estado <> 'Anulada'`,
+        [venta.factura_id, empresaId]
+      );
+      await client.query(
+        `UPDATE ${tFE} SET estado_sifen = 'cancelado'
+          WHERE factura_id = $1::uuid AND empresa_id = $2::uuid
+            AND estado_sifen NOT IN ('aprobado', 'enviado', 'cancelado')`,
+        [venta.factura_id, empresaId]
+      );
+    }
 
     // ── 7) Marcar la venta como ANULADA.
     await client.query(
