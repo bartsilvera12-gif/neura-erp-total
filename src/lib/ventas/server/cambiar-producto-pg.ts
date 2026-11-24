@@ -194,7 +194,7 @@ export async function cambiarProductoVenta(
       }
     }
     if (nuevo.controla_stock !== false && nuevoBase > 0) {
-      await client.query(`UPDATE ${tProd} SET stock_actual = GREATEST(0, stock_actual - $2::numeric), updated_at=now() WHERE id=$1::uuid`, [p.nuevoProductoId, nuevoBase]);
+      await client.query(`UPDATE ${tProd} SET stock_actual = stock_actual - $2::numeric, updated_at=now() WHERE id=$1::uuid`, [p.nuevoProductoId, nuevoBase]);
       await client.query(
         `INSERT INTO ${tMov} (empresa_id, producto_id, producto_nombre, producto_sku, tipo, cantidad, costo_unitario, origen, referencia, fecha, venta_id, created_by, usuario_nombre, observaciones)
          VALUES ($1::uuid,$2::uuid,$3,$4,'SALIDA',$5::numeric,$6::numeric,'venta',$7,now(),$8::uuid,$9,$10,$11)`,

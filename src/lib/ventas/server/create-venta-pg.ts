@@ -749,7 +749,10 @@ export async function createVentaTransaccionalPg(
       const p = stockMap.get(line.producto_id)!;
       if (recetaByProducto.has(line.producto_id)) continue;
       if (!p.controlaStock && p.modo !== "produccion_previa") continue;
-      const nuevoStock = Math.max(0, p.stock - lr.cantidadTotalBase);
+      // Vender sin existencia (confirmado en el modal) deja el stock en negativo:
+      // la compra posterior lo compensa y el stock coincide con el Kardex (#674).
+      // Antes se frenaba en 0 y la compra dejaba una unidad de más.
+      const nuevoStock = p.stock - lr.cantidadTotalBase;
       const upd = await sb
         .from("productos")
         .update({ stock_actual: nuevoStock })
@@ -781,9 +784,8 @@ export async function createVentaTransaccionalPg(
     // 7b) Descontar materia prima (insumos) por explosión de receta + movimiento SALIDA por insumo.
     for (const [insId, need] of insumoNeed) {
       const m = insumoMeta.get(insId)!;
-      // Igual que productos: el stock de insumos nunca baja de 0 (la salida real
-      // queda registrada en el movimiento SALIDA del insumo).
-      const nuevoStock = Math.max(0, m.stock - need);
+      // Igual que productos: puede quedar negativo y la compra lo compensa (#674).
+      const nuevoStock = m.stock - need;
       const upd = await sb
         .from("productos")
         .update({ stock_actual: nuevoStock })
